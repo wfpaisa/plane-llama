@@ -21,6 +21,7 @@ pub const TAB_MODELS: usize = 6;
 const SIMPLE_KEY: &str = "plane-llama-simple";
 /// Última página abierta en la vista ampliada.
 const EXTENDED_TAB_KEY: &str = "plane-llama-extended-tab";
+const EDITOR_SOURCE_KEY: &str = "plane-llama-editor-source";
 const TABS: [usize; 5] = [TAB_BENCH, TAB_HISTORY, TAB_LOGS, TAB_SCRIPTS, TAB_MODELS];
 /// Vista guardada en `ui.ron`, para crear la primera ventana con su tamaño; antes de
 /// que eframe abra el almacenamiento. Por defecto, la simple.
@@ -163,6 +164,8 @@ pub struct Store {
     pub extended_tab: usize,
     pub prompt_seeded: bool,
     pub script_seeded: bool,
+    /// Script de la biblioteca abierto en el editor; «Actualizar» lo sobrescribe.
+    pub editor_source: Option<String>,
     /// Vista simple (ventana compacta con los scripts) o ampliada (todas las páginas).
     pub simple: bool,
     /// Muestra el último resultado encima de la lista de scripts.
@@ -230,6 +233,7 @@ impl Default for Store {
             extended_tab: TAB_BENCH,
             prompt_seeded: false,
             script_seeded: false,
+            editor_source: None,
             simple: true,
             result_banner: false,
             library: Scripts::default(),
@@ -298,6 +302,9 @@ impl Store {
                     .filter(|(_, w)| w.is_finite() && *w > 0.)
                     .collect();
             }
+            s.editor_source = storage
+                .get_string(EDITOR_SOURCE_KEY)
+                .filter(|v| !v.is_empty());
             if let Some(v) = read(SIMPLE_KEY).and_then(|v| v.as_bool()) {
                 s.simple = v;
             }
@@ -344,6 +351,10 @@ impl Store {
         storage.set_string(
             COLUMN_WIDTHS_KEY,
             serde_json::to_string(&self.column_widths).unwrap_or_default(),
+        );
+        storage.set_string(
+            EDITOR_SOURCE_KEY,
+            self.editor_source.clone().unwrap_or_default(),
         );
         storage.set_string(SIMPLE_KEY, self.simple.to_string());
         let extended_tab = if self.simple {
@@ -487,11 +498,45 @@ impl Store {
         }
     }
     /// Lleva un script al editor de la vista ampliada.
-    pub fn open_in_editor(&mut self, script: String) {
+    pub fn open_in_editor(&mut self, script: String, source: Option<String>) {
         self.script = script;
+        self.editor_source = source;
         self.script_seeded = true;
         self.simple = false;
         self.tab = TAB_BENCH;
+    }
+    /// El script guardado ligado al editor, si sigue en la biblioteca.
+    pub fn editor_saved(&self) -> Option<&scripts::SavedScript> {
+        self.library.get(self.editor_source.as_deref()?)
+    }
+    /// Sobrescribe el script ligado al editor con el texto del editor.
+    pub fn update_saved_from_editor(&mut self) {
+        let Some(saved) = self.editor_saved() else {
+            return;
+        };
+        let name = saved.name.clone();
+        let draft = library::Draft {
+            id: Some(saved.id.clone()),
+            name: name.clone(),
+            script: self.script.clone(),
+            to_editor: true,
+        };
+        self.library.commit(draft);
+        self.save_library();
+        self.notice(format!("Script «{name}» actualizado"));
+    }
+    /// Abre el diálogo para guardar el editor como un script nuevo de la biblioteca.
+    pub fn save_editor_as_new(&mut self) {
+        let name = self
+            .editor_saved()
+            .map(|s| format!("{} (copia)", s.name))
+            .unwrap_or_default();
+        self.library.draft = Some(library::Draft {
+            id: None,
+            name,
+            script: self.script.clone(),
+            to_editor: true,
+        });
     }
     pub fn running(&self) -> bool {
         store_logic::running(&self.status)
@@ -749,7 +794,10 @@ impl Store {
                     self.prompt = v;
                 }
             }
-            Message::Script(v) => self.script = v,
+            Message::Script(v) => {
+                self.script = v;
+                self.editor_source = None;
+            }
             Message::Prompt(v) => self.prompt = v,
             Message::Favorites(v) => self.favorites = v,
             Message::Result(v) => {

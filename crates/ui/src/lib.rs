@@ -521,7 +521,8 @@ impl App {
     }
 }
 
-/// Página de benchmark: indicadores, script y prueba lado a lado, detalle y respuesta.
+/// Página Editor: el script arriba y, en su propia sección, el benchmark (indicadores,
+/// prueba y detalle del último resultado lado a lado, y la respuesta).
 /// Contenido de la página elegida en la vista ampliada.
 fn page(ui: &mut egui::Ui, s: &mut Store) {
     match s.tab {
@@ -539,43 +540,49 @@ fn page(ui: &mut egui::Ui, s: &mut Store) {
 }
 
 fn bench_page(ui: &mut egui::Ui, s: &mut Store) {
+    script_editor::show(ui, s);
+    ui.add_space(Tokens::S6);
+    widgets::section_title(ui, widgets::icons::GAUGE, "Benchmark");
+    ui.add_space(Tokens::S3);
     last_result::kpis(ui, s);
-    ui.add_space(Tokens::S4);
+    ui.add_space(Tokens::S1);
     let width = ui.available_width();
     if width >= Tokens::TWO_COLUMNS {
         let gap = Tokens::S4;
-        let right = (width - gap) * Tokens::SIDE_COLUMN;
-        let left = width - gap - right;
+        let left = (width - gap) * Tokens::SIDE_COLUMN;
+        let right = width - gap - left;
+        // El espacio entre columnas no se hereda dentro de ellas.
+        let spacing = ui.spacing().item_spacing.x;
         ui.horizontal_top(|ui| {
             ui.spacing_mut().item_spacing.x = gap;
             ui.allocate_ui_with_layout(
                 egui::vec2(left, 0.),
                 egui::Layout::top_down(egui::Align::Min),
                 |ui| {
+                    ui.spacing_mut().item_spacing.x = spacing;
                     ui.set_width(left);
-                    script_editor::show(ui, s);
+                    benchmark_panel::show(ui, s);
                 },
             );
             ui.allocate_ui_with_layout(
                 egui::vec2(right, 0.),
                 egui::Layout::top_down(egui::Align::Min),
                 |ui| {
+                    ui.spacing_mut().item_spacing.x = spacing;
                     ui.set_width(right);
-                    benchmark_panel::show(ui, s);
+                    last_result::show(ui, s);
                 },
             );
         });
     } else {
-        script_editor::show(ui, s);
-        ui.add_space(Tokens::S4);
         benchmark_panel::show(ui, s);
+        ui.add_space(Tokens::S4);
+        last_result::show(ui, s);
     }
-    ui.add_space(Tokens::S4);
-    response_card::show(ui, s);
     if s.show_response {
         ui.add_space(Tokens::S4);
     }
-    last_result::show(ui, s);
+    response_card::show(ui, s);
 }
 impl eframe::App for App {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {

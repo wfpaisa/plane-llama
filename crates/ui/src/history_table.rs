@@ -692,12 +692,14 @@ fn body_cell(
             });
             if load {
                 s.script = r.config.script.clone();
+                s.editor_source = None;
                 s.tab = TAB_BENCH;
                 s.notice("Script cargado en el editor");
             }
             // Abre el diálogo de nuevo script con el comando de esta corrida.
             if save {
                 s.library.draft = Some(crate::library::Draft {
+                    to_editor: false,
                     id: None,
                     name: String::new(),
                     script: r.config.script.clone(),

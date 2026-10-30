@@ -710,3 +710,38 @@ fn scripts_loading_row_can_be_stopped() {
     h.run_steps(2);
     assert!(h.state().actions.iter().any(|a| matches!(a, Action::Stop)));
 }
+
+/// Con un script de la biblioteca abierto en el editor, «Actualizar script» guarda los
+/// cambios en él y «Guardar como nuevo» abre el diálogo ligado al editor.
+#[test]
+fn editor_updates_or_saves_library_script() {
+    use plane_llama_ui::script_editor;
+    let mut s = Store::default();
+    s.library.list = vec![scripts::SavedScript::new(
+        "Mi script",
+        "llama-server -hf unsloth/A-GGUF:Q8_0",
+    )];
+    s.library.loaded = true;
+    s.refresh_library();
+    let id = s.library.list[0].id.clone();
+    s.open_in_editor(s.library.list[0].script.clone(), Some(id.clone()));
+    s.script.push_str(" --port 9000");
+    let mut h = Harness::builder()
+        .with_size(egui::vec2(1200., 700.))
+        .build_ui_state(script_editor::show, s);
+    h.run();
+    h.get_by_label("Actualizar script").click();
+    h.run();
+    assert!(h.state().library.list[0].script.contains("--port 9000"));
+    assert_eq!(h.state().editor_source.as_deref(), Some(id.as_str()));
+    h.get_by_label("Guardar como nuevo").click();
+    h.run();
+    let draft = h.state().library.draft.clone().unwrap();
+    assert!(draft.to_editor && draft.id.is_none());
+    assert_eq!(draft.name, "Mi script (copia)");
+    // La X del aviso deja de editarlo sin tocar el texto.
+    h.get_by_label("Dejar de editar este script").click();
+    h.run();
+    assert!(h.state().editor_source.is_none());
+    assert!(h.state().script.contains("--port 9000"));
+}

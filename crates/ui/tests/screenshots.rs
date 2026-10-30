@@ -134,6 +134,7 @@ async fn render_pages() {
         let s = &mut h.state_mut().as_mut().unwrap().store;
         let first = s.library.list.first().cloned();
         s.library.draft = first.map(|x| library::Draft {
+            to_editor: false,
             id: Some(x.id),
             name: x.name,
             script: x.script,
@@ -182,6 +183,7 @@ async fn render_pages() {
         s.tab = store::TAB_SCRIPTS;
         let first = s.library.list.first().cloned();
         s.library.draft = first.map(|x| library::Draft {
+            to_editor: false,
             id: Some(x.id),
             name: x.name,
             script: x.script,
@@ -261,7 +263,15 @@ async fn render_pages() {
         s.flags_open = true;
     }
     shot(&mut h, "07-flags");
-    h.state_mut().as_mut().unwrap().store.flags_open = false;
+    {
+        // Editor ligado a un script guardado, con cambios: muestra el aviso «Editando».
+        let s = &mut h.state_mut().as_mut().unwrap().store;
+        s.flags_open = false;
+        if let Some(first) = s.library.list.first().cloned() {
+            s.open_in_editor(first.script, Some(first.id));
+            s.script.push_str(" \\\n--port 8111");
+        }
+    }
     h.ctx.set_theme(egui::Theme::Light);
     shot(&mut h, "08-benchmark-claro");
     h.state_mut().as_mut().unwrap().store.tab = store::TAB_HISTORY;

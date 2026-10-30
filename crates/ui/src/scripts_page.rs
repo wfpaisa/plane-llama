@@ -127,6 +127,7 @@ pub(crate) fn apply(s: &mut Store, a: RowAction) {
         RowAction::Edit(id) => {
             if let Some(x) = s.library.get(&id) {
                 s.library.draft = Some(Draft {
+                    to_editor: false,
                     id: Some(x.id.clone()),
                     name: x.name.clone(),
                     script: x.script.clone(),
@@ -135,7 +136,7 @@ pub(crate) fn apply(s: &mut Store, a: RowAction) {
         }
         RowAction::Open(id) => {
             if let Some(x) = s.library.get(&id).map(|x| x.script.clone()) {
-                s.open_in_editor(x);
+                s.open_in_editor(x, Some(id));
             }
         }
         RowAction::Duplicate(id) => {
@@ -216,6 +217,7 @@ pub(crate) fn apply(s: &mut Store, a: RowAction) {
 
 pub(crate) fn new_script(s: &mut Store) {
     s.library.draft = Some(Draft {
+        to_editor: false,
         id: None,
         name: String::new(),
         script: plane_llama_core::models::SCRIPT_TEMPLATE.into(),
@@ -891,7 +893,11 @@ pub fn editor_dialog(ctx: &egui::Context, s: &mut Store) {
         });
     });
     if save {
-        s.library.commit(draft);
+        let to_editor = draft.to_editor;
+        let id = s.library.commit(draft);
+        if to_editor {
+            s.editor_source = Some(id);
+        }
         s.save_library();
         s.notice("Script guardado");
         return;

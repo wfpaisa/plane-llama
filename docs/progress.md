@@ -698,3 +698,25 @@ Hecho a mano, sin codex. Reemplaza el estilo Solidcraft.
 - La carga simulada del modelo se pinta en verde (`ok_soft`).
 - Se quitaron los tokens de columnas fijas (`CHIP_SLOT`, `QUANT_SLOT`, `TPS_SLOT`,
   `ICON_SLOT`, `ROW_QUANT`, `ROW_TPS`, `ROW_WIDE`, `ROW_WIDER`).
+
+### Crear o actualizar un script desde el editor
+
+- El editor recuerda de qué script de la biblioteca viene (`Store::editor_source`, se
+  persiste en `plane-llama-editor-source`). Se liga al usar «Abrir en el editor» en
+  Scripts o al guardar el editor como script nuevo; se suelta al cargar el script por
+  defecto o uno del historial.
+- Ligado: botón «Actualizar script» (activo solo si hay cambios respecto al guardado) y
+  el subtítulo muestra «nombre» · cambios sin guardar. Sin ligar: «Guardar como script»
+  abre el diálogo con el texto del editor.
+- Las acciones menos usadas pasan al menú «⋯»: guardar como script nuevo, formatear,
+  guardar como script por defecto y volver al script por defecto.
+
+### Editor destacado y página separada en script y benchmark
+
+- Con un script de la biblioteca ligado, la tarjeta del editor lleva el borde en acento
+  y una franja «Editando *nombre*» con su estado (cambios sin guardar / guardado),
+  «Guardar como nuevo» (crea otro script con el texto del editor) y una X para dejar de
+  editarlo sin tocar el texto. `widgets::card_marked` pinta el borde sin cambiar grosor.
+- La página Editor queda en dos secciones: arriba el script a todo el ancho; debajo,
+  con su título (`widgets::section_title`), «Benchmark»: indicadores, la prueba y el
+  detalle del último resultado lado a lado, y la respuesta del modelo.

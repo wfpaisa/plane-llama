@@ -400,6 +400,7 @@ fn use_model(s: &mut Store, hf: &str, new_script: bool) {
             s.script.clone()
         };
         s.library.draft = Some(Draft {
+            to_editor: false,
             id: None,
             name: String::new(),
             script: script_with_model(&base, hf),

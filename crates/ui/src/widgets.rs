@@ -148,10 +148,17 @@ pub fn enabled<R>(ui: &mut Ui, enabled: bool, body: impl FnOnce(&mut Ui) -> R) -
 }
 
 pub fn card<R>(ui: &mut Ui, body: impl FnOnce(&mut Ui) -> R) -> R {
+    card_marked(ui, false, body)
+}
+/// Tarjeta con el borde en acento cuando `marked` (mismo grosor: no mueve el contenido).
+pub fn card_marked<R>(ui: &mut Ui, marked: bool, body: impl FnOnce(&mut Ui) -> R) -> R {
     let t = Tokens::get(ui.ctx());
     Frame::new()
         .fill(t.surface)
-        .stroke(Stroke::new(Tokens::BORDER, t.border))
+        .stroke(Stroke::new(
+            Tokens::BORDER,
+            if marked { t.accent } else { t.border },
+        ))
         .corner_radius(Tokens::RADIUS_LG)
         .inner_margin(margin(Tokens::S5))
         .show(ui, |ui| {
@@ -238,6 +245,28 @@ pub fn page_title(ui: &mut Ui, title: &str, subtitle: &str) {
     });
 }
 /// Etiqueta de sección en mayúsculas pequeñas.
+/// Título de una sección de página: icono, nombre y una línea que llega al borde.
+pub fn section_title(ui: &mut Ui, icon: &str, title: &str) {
+    let t = Tokens::get(ui.ctx());
+    ui.horizontal(|ui| {
+        ui.label(
+            RichText::new(icon)
+                .font(theme::icon_font(Tokens::ICON))
+                .color(t.text_dim),
+        );
+        ui.label(
+            RichText::new(title)
+                .font(theme::font_semibold(Tokens::FONT_MD))
+                .color(t.text),
+        );
+        let rect = ui.available_rect_before_wrap();
+        ui.painter().hline(
+            (rect.left() + Tokens::S2)..=rect.right(),
+            rect.center().y,
+            Stroke::new(Tokens::BORDER, t.border),
+        );
+    });
+}
 pub fn section_label(ui: &mut Ui, text: &str) {
     let t = Tokens::get(ui.ctx());
     let mut job = egui::text::LayoutJob::default();

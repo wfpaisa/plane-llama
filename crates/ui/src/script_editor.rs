@@ -52,8 +52,68 @@ pub fn summary(ui: &mut egui::Ui, script: &str) {
     });
 }
 
+/// Aviso de que el editor modifica un script guardado, con su estado y las salidas:
+/// guardarlo como uno nuevo o dejar de editarlo (el texto se queda en el editor).
+fn editing_bar(ui: &mut egui::Ui, s: &mut Store, name: &str, changed: bool) {
+    let t = Tokens::get(ui.ctx());
+    egui::Frame::new()
+        .fill(t.accent_soft)
+        .corner_radius(Tokens::RADIUS_MD)
+        .inner_margin(egui::Margin::symmetric(Tokens::S3 as i8, Tokens::S2 as i8))
+        .show(ui, |ui| {
+            ui.set_min_width(ui.available_width());
+            ui.horizontal(|ui| {
+                ui.label(
+                    egui::RichText::new(icons::PENCIL_SIMPLE)
+                        .font(crate::theme::icon_font(Tokens::ICON))
+                        .color(t.accent_ink),
+                );
+                ui.label(
+                    egui::RichText::new("Editando")
+                        .font(crate::theme::font(Tokens::FONT_BODY))
+                        .color(t.text_dim),
+                );
+                ui.add(
+                    egui::Label::new(
+                        egui::RichText::new(name)
+                            .font(crate::theme::font_semibold(Tokens::FONT_BODY))
+                            .color(t.text),
+                    )
+                    .truncate(),
+                );
+                if changed {
+                    widgets::chip(ui, "cambios sin guardar", t.warning_soft, t.warning);
+                } else {
+                    widgets::chip(ui, "guardado", t.surface_alt, t.text_dim);
+                }
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if widgets::icon_button(ui, icons::X, "Dejar de editar este script").clicked() {
+                        s.editor_source = None;
+                    }
+                    if widgets::button(
+                        ui,
+                        Kind::Ghost,
+                        Some(icons::FILE_PLUS),
+                        "Guardar como nuevo",
+                    )
+                    .on_hover_text("Crea otro script con el texto del editor")
+                    .clicked()
+                    {
+                        s.save_editor_as_new();
+                    }
+                });
+            });
+        });
+    ui.add_space(Tokens::S3);
+}
+
 pub fn show(ui: &mut egui::Ui, s: &mut Store) {
-    widgets::card(ui, |ui| {
+    // Script de la biblioteca abierto aquí y si el editor tiene cambios sin guardar en él.
+    let saved = s.editor_saved().map(|x| {
+        let changed = format_script(&s.script) != x.script;
+        (x.name.clone(), changed)
+    });
+    widgets::card_marked(ui, saved.is_some(), |ui| {
         widgets::card_header(
             ui,
             icons::CODE,
@@ -66,8 +126,37 @@ pub fn show(ui: &mut egui::Ui, s: &mut Store) {
                 {
                     crate::optimizer_modal::open(s);
                 }
-                if widgets::icon_button(ui, icons::BOOK_OPEN_TEXT, "Catálogo de flags").clicked() {
-                    s.flags_open = true;
+                // Con un script de la biblioteca ligado, se actualiza; si no, se guarda nuevo.
+                match &saved {
+                    Some((name, changed)) => {
+                        if widgets::enabled(ui, *changed, |ui| {
+                            widgets::button(
+                                ui,
+                                Kind::Secondary,
+                                Some(icons::FLOPPY_DISK),
+                                "Actualizar script",
+                            )
+                        })
+                        .on_hover_text(format!("Guarda los cambios en «{name}»"))
+                        .on_disabled_hover_text(format!("Sin cambios respecto a «{name}»"))
+                        .clicked()
+                        {
+                            s.update_saved_from_editor();
+                        }
+                    }
+                    None => {
+                        if widgets::button(
+                            ui,
+                            Kind::Secondary,
+                            Some(icons::FILE_PLUS),
+                            "Guardar como script",
+                        )
+                        .on_hover_text("Lo agrega a tus scripts con un nombre")
+                        .clicked()
+                        {
+                            s.save_editor_as_new();
+                        }
+                    }
                 }
                 let pick = widgets::icon_button(ui, icons::CUBE, "Elegir modelo descargado");
                 if let Some(crate::models_page::Picked::Model(hf)) =
@@ -76,35 +165,43 @@ pub fn show(ui: &mut egui::Ui, s: &mut Store) {
                     s.script = plane_llama_core::models::script_with_model(&s.script, &hf);
                     s.script_seeded = true;
                 }
-                if widgets::icon_button(ui, icons::BOOKMARK_SIMPLE, "Guardar en mis scripts")
-                    .clicked()
-                {
-                    s.library.draft = Some(crate::library::Draft {
-                        id: None,
-                        name: String::new(),
-                        script: s.script.clone(),
+                if widgets::icon_button(ui, icons::BOOK_OPEN_TEXT, "Catálogo de flags").clicked() {
+                    s.flags_open = true;
+                }
+                let menu = widgets::icon_button(ui, icons::DOTS_THREE, "Más acciones del script");
+                egui::Popup::menu(&menu)
+                    .close_behavior(egui::PopupCloseBehavior::CloseOnClick)
+                    .show(|ui| {
+                        let item = |ui: &mut egui::Ui, icon, label| {
+                            widgets::button(ui, Kind::Ghost, Some(icon), label).clicked()
+                        };
+                        if item(ui, icons::TEXT_INDENT, "Formatear") {
+                            s.script = format_script(&s.script);
+                            s.notice("Script formateado");
+                        }
+                        widgets::separator(ui);
+                        if item(ui, icons::PUSH_PIN, "Guardar como script por defecto") {
+                            s.confirm(
+                                "¿Guardar el script actual como default?",
+                                Action::SaveScript(s.script.clone()),
+                            );
+                        }
+                        if item(
+                            ui,
+                            icons::ARROW_COUNTER_CLOCKWISE,
+                            "Volver al script por defecto",
+                        ) {
+                            s.confirm(
+                                "¿Restablecer el script al default guardado? Se perderán los cambios no guardados.",
+                                Action::ScriptDefault,
+                            );
+                        }
                     });
-                }
-                if widgets::icon_button(ui, icons::ARROW_COUNTER_CLOCKWISE, "Obtener guardado")
-                    .clicked()
-                {
-                    s.confirm(
-                        "¿Restablecer el script al default guardado? Se perderán los cambios no guardados.",
-                        Action::ScriptDefault,
-                    );
-                }
-                if widgets::icon_button(ui, icons::FLOPPY_DISK, "Guardar").clicked() {
-                    s.confirm(
-                        "¿Guardar el script actual como default?",
-                        Action::SaveScript(s.script.clone()),
-                    );
-                }
-                if widgets::icon_button(ui, icons::TEXT_INDENT, "Formatear").clicked() {
-                    s.script = format_script(&s.script);
-                    s.notice("Script formateado");
-                }
             },
         );
+        if let Some((name, changed)) = &saved {
+            editing_bar(ui, s, name, *changed);
+        }
         let pasted = ui.input(|i| i.events.iter().any(|e| matches!(e, egui::Event::Paste(_))));
         let edited = code_box(
             ui,

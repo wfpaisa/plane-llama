@@ -57,6 +57,8 @@ pub struct Draft {
     pub id: Option<String>,
     pub name: String,
     pub script: String,
+    /// Viene del editor: al guardarlo, el editor queda ligado al script nuevo.
+    pub to_editor: bool,
 }
 
 #[derive(Default)]
@@ -422,6 +424,7 @@ mod tests {
     fn drafts_duplicates_and_running() {
         let mut lib = Scripts::default();
         let id = lib.commit(Draft {
+            to_editor: false,
             id: None,
             name: " ".into(),
             script: "llama-server   -hf a/Q-GGUF:Q8_0".into(),
@@ -432,6 +435,7 @@ mod tests {
         assert_ne!(copy, id);
         assert_eq!(lib.list[1].name, "a/Q (copia)");
         lib.commit(Draft {
+            to_editor: false,
             id: Some(id.clone()),
             name: "Mío".into(),
             script: "llama-server -hf a/Q-GGUF:Q4_0".into(),
