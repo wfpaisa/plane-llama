@@ -622,3 +622,31 @@ Hecho a mano, sin codex. Reemplaza el estilo Solidcraft.
   no con un clic). Las fichas (`widgets::chip`, `widgets::best`: tamaño, cuantización,
   mejor valor) pasaron de texto pintado a `Label` dentro de un `Frame`, para poder
   copiarlas también. Test: `history_cells_text_can_be_copied` (aplica el tema de la app).
+
+## Minimizar en GNOME y optimizador en un diálogo
+
+- Minimizar no hacía nada: la ventana nueva se marca como diálogo modal
+  (`xdg_dialog_v1`, `center`) para que Mutter la centre y solo vuelve a ser normal al
+  perder el foco. Mutter no minimiza (ni maximiza) ventanas que no son normales. Los
+  botones de la barra y el doble clic llaman antes a `center::placed`.
+- El optimizador ya no es una página: `optimizer_modal::show` es un diálogo
+  (`widgets::dialog`, ancho `DIALOG_LG`) en `overlays`, encima de cualquier página.
+  Se abre con «Optimizar» (botón primario) en la tarjeta del script; ya no está en la
+  barra lateral, cuya entrada «Benchmark» pasa a llamarse «Editor» (igual que el título de la página). Cerrar con ✕ o Escape equivale a «Cancelar». «Aplicar al script» sigue
+  llevando a Benchmark. `TAB_OPTIMIZER` ya no se guarda como última página.
+
+## Optimizador más claro
+
+- Cada parámetro explica para qué sirve y cómo afecta a la VRAM, con su flag a la
+  derecha. Apagado solo se ve la explicación (queda el valor por defecto de
+  llama-server); encendido, también su control. Flash attention, visión, dispositivos
+  y reparto siguen el mismo formato.
+- Los grupos tienen subtítulo y van por impacto: contexto y capas, caché KV, batch,
+  memoria y especulativo, dispositivos.
+- En ventana ancha, la cabecera del modelo queda arriba y las columnas se desplazan
+  por separado: el consumo sigue a la vista al mover los parámetros.
+- Veredicto bajo la barra: «Cabe: quedan X GB libres» o «No cabe: faltan X GB» con
+  qué bajar. La calibración explica que la estimación es aproximada.
+- «Default» pasa a «Restablecer». Las fichas del modelo omiten los datos que faltan.
+- `widgets::chip` reserva solo el ancho de su texto: en filas con salto cada ficha
+  bajaba a su propia línea (también bajo el script del Editor).

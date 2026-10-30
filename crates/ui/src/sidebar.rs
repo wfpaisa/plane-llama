@@ -1,25 +1,21 @@
 // Barra lateral: marca, navegación entre páginas, hardware y control del servidor.
 use crate::{
-    gpu_grid, optimizer_modal, status_bar,
-    store::{Store, TAB_BENCH, TAB_HISTORY, TAB_LOGS, TAB_MODELS, TAB_OPTIMIZER, TAB_SCRIPTS},
+    gpu_grid, status_bar,
+    store::{Store, TAB_BENCH, TAB_HISTORY, TAB_LOGS, TAB_MODELS, TAB_SCRIPTS},
     theme::{self, Tokens},
     widgets::{self, icons},
 };
 use egui::{Align2, CursorIcon, RichText, Sense, Stroke, Ui, WidgetInfo, WidgetType, pos2, vec2};
 
-pub const PAGES: [(usize, &str, &str); 6] = [
+pub const PAGES: [(usize, &str, &str); 5] = [
     (TAB_SCRIPTS, icons::ROCKET_LAUNCH, "Scripts"),
-    (TAB_MODELS, icons::CUBE, "Modelos"),
-    (TAB_BENCH, icons::GAUGE, "Benchmark"),
+    (TAB_BENCH, icons::GAUGE, "Editor"),
     (TAB_HISTORY, icons::CLOCK_COUNTER_CLOCKWISE, "Historial"),
-    (TAB_OPTIMIZER, icons::LIGHTNING, "Optimizador"),
+    (TAB_MODELS, icons::CUBE, "Modelos"),
     (TAB_LOGS, icons::TERMINAL_WINDOW, "Logs"),
 ];
 
 pub fn go(s: &mut Store, tab: usize) {
-    if tab == TAB_OPTIMIZER && s.optimizer.is_none() {
-        optimizer_modal::open(s);
-    }
     s.tab = tab;
 }
 

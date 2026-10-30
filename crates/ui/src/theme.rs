@@ -223,6 +223,8 @@ impl Tokens {
     pub const COMPARE_COLUMN: f32 = 170.;
     pub const CHART_HEIGHT: f32 = 420.;
     pub const VALUE_WIDTH: f32 = 72.;
+    /// Espacio del botón «Recargar dispositivos» junto a los datos del modelo.
+    pub const RELOAD_WIDTH: f32 = 220.;
     pub const ROW_LG: f32 = 40.;
     pub const ROW_HUB: f32 = 56.;
     pub const CHIP_SLOT: f32 = 76.;

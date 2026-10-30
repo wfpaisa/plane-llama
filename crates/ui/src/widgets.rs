@@ -337,8 +337,17 @@ fn chip_with(
     let margin = egui::vec2((Tokens::S2 + 2.) / 2., (Tokens::S1 + 1.) / 2.);
     // Alto acotado: en una fila centrada el marco ocuparía todo el alto disponible.
     let height = ui.fonts_mut(|f| f.row_height(&font)) + 2. * margin.y;
+    // Ancho justo: con todo el disponible, en una fila con salto cada ficha bajaba
+    // a su propia línea.
+    let width = ui
+        .painter()
+        .layout_no_wrap(text.to_owned(), font.clone(), ink)
+        .size()
+        .x
+        + 2. * margin.x
+        + 1.;
     ui.allocate_ui_with_layout(
-        egui::vec2(ui.available_width(), height),
+        egui::vec2(width, height),
         egui::Layout::left_to_right(egui::Align::Center),
         |ui| {
             egui::Frame::new()

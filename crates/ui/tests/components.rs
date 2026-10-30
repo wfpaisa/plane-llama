@@ -243,8 +243,8 @@ fn optimizer_modal_defaults_cancel_apply_and_ignore_old_responses() {
     s.optimizer.as_mut().unwrap().loading = false;
     let mut h = Harness::builder()
         .with_size(egui::vec2(1440., 1000.))
-        .build_ui_state(optimizer_modal::show, s);
-    h.get_by_label("Default").click();
+        .build_ui_state(|ui, s| optimizer_modal::show(&ui.ctx().clone(), s), s);
+    h.get_by_label("Restablecer").click();
     h.run();
     assert_eq!(h.state().optimizer.as_ref().unwrap().params.ctx_size, 2048.);
     h.get_by_label("Cancelar").click();
@@ -254,7 +254,7 @@ fn optimizer_modal_defaults_cancel_apply_and_ignore_old_responses() {
     optimizer_modal::open(h.state_mut());
     h.state_mut().optimizer.as_mut().unwrap().loading = false;
     h.run();
-    h.get_by_label("Default").click();
+    h.get_by_label("Restablecer").click();
     h.run();
     h.get_by_label("Aplicar al script").click();
     h.run();

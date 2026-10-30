@@ -1,4 +1,4 @@
-// Página del optimizador: ajustes temporales y estimación local de VRAM, con
+// Diálogo del optimizador: ajustes temporales y estimación local de VRAM, con
 // calibración real por modelo. Nada se escribe en el script hasta «Aplicar al script».
 use crate::theme::{self, Tokens};
 use crate::widgets::{self, Kind, icons};
@@ -94,27 +94,65 @@ pub fn open(s: &mut Store) {
     s.optimizer = Some(o);
 }
 
-/// Fila de parámetro: interruptor que incluye el flag, nombre, flag y control debajo.
+/// Fila de parámetro: interruptor (escribir o no el flag), flag, para qué sirve y, si
+/// está activo, su control. Apagado, llama-server usa su valor por defecto.
 fn param_row(
     ui: &mut egui::Ui,
     enabled: &mut TunedFlagsEnabled,
     key: &str,
     label: &str,
     flag: &str,
+    hint: &str,
     control: impl FnOnce(&mut egui::Ui),
 ) {
     let on = enabled.entry(key.into()).or_default();
     ui.horizontal(|ui| {
         widgets::toggle(ui, on, label);
-        ui.label(
-            RichText::new(flag)
-                .font(egui::FontId::monospace(Tokens::FONT_XS))
-                .color(Tokens::get(ui.ctx()).text_faint),
-        );
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            flag_label(ui, flag);
+        });
     });
     let on = *on;
-    ui.add_enabled_ui(on, control);
-    ui.add_space(Tokens::S1);
+    indented(ui, |ui| {
+        hint_label(ui, hint);
+        if on {
+            control(ui);
+        }
+    });
+    ui.add_space(Tokens::S3);
+}
+/// Interruptor de un valor sí/no, con su flag y explicación como las demás filas.
+fn switch_row(ui: &mut egui::Ui, value: &mut bool, label: &str, flag: &str, hint: &str) {
+    ui.horizontal(|ui| {
+        widgets::toggle(ui, value, label);
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            flag_label(ui, flag);
+        });
+    });
+    indented(ui, |ui| hint_label(ui, hint));
+    ui.add_space(Tokens::S3);
+}
+fn flag_label(ui: &mut egui::Ui, flag: &str) {
+    ui.label(
+        RichText::new(flag)
+            .font(egui::FontId::monospace(Tokens::FONT_XS))
+            .color(Tokens::get(ui.ctx()).text_faint),
+    );
+}
+fn hint_label(ui: &mut egui::Ui, hint: &str) {
+    ui.label(
+        RichText::new(hint)
+            .font(theme::font(Tokens::FONT_SM))
+            .color(Tokens::get(ui.ctx()).text_dim),
+    );
+}
+/// Alineado con el texto del interruptor, no con su pista.
+fn indented<R>(ui: &mut egui::Ui, body: impl FnOnce(&mut egui::Ui) -> R) -> R {
+    ui.horizontal(|ui| {
+        ui.add_space(Tokens::TOGGLE[0] + Tokens::S3);
+        ui.vertical(body).inner
+    })
+    .inner
 }
 #[allow(clippy::too_many_arguments)]
 fn slider(
@@ -123,11 +161,12 @@ fn slider(
     key: &str,
     label: &str,
     flag: &str,
+    hint: &str,
     value: &mut f64,
     range: std::ops::RangeInclusive<f64>,
     step: f64,
 ) {
-    param_row(ui, enabled, key, label, flag, |ui| {
+    param_row(ui, enabled, key, label, flag, hint, |ui| {
         slider_control(ui, value, range, step)
     });
 }
@@ -156,9 +195,10 @@ fn kv(
     key: &str,
     label: &str,
     flag: &str,
+    hint: &str,
     value: &mut String,
 ) {
-    param_row(ui, enabled, key, label, flag, |ui| {
+    param_row(ui, enabled, key, label, flag, hint, |ui| {
         egui::ComboBox::from_id_salt(key)
             .width(ui.available_width())
             .selected_text(value.to_uppercase())
@@ -169,52 +209,72 @@ fn kv(
             });
     });
 }
-fn group(ui: &mut egui::Ui, icon: &str, title: &str, body: impl FnOnce(&mut egui::Ui)) {
+fn group(
+    ui: &mut egui::Ui,
+    icon: &str,
+    title: &str,
+    subtitle: &str,
+    body: impl FnOnce(&mut egui::Ui),
+) {
     widgets::card(ui, |ui| {
-        widgets::card_header(ui, icon, title, None, |_| {});
+        widgets::card_header(ui, icon, title, Some(subtitle), |_| {});
+        ui.add_space(Tokens::S2);
         body(ui);
     });
     ui.add_space(Tokens::S3);
 }
 
+/// Modelo analizado, cómo se usa el optimizador y avisos de la estimación.
 fn model_header(ui: &mut egui::Ui, o: &Optimizer, reload: &mut bool) {
     let t = Tokens::get(ui.ctx());
     widgets::card(ui, |ui| {
         ui.horizontal(|ui| {
             widgets::icon_tile(ui, icons::CUBE, t.accent_soft, t.accent_ink);
-            ui.vertical(|ui| {
-                ui.spacing_mut().item_spacing.y = Tokens::S1;
-                match &o.estimate {
-                    Some(e) => {
-                        let m = &e.model_meta;
-                        ui.label(
-                            RichText::new(&m.base)
-                                .font(theme::font_semibold(Tokens::FONT_MD))
-                                .color(t.text),
-                        );
-                        ui.horizontal_wrapped(|ui| {
-                            ui.spacing_mut().item_spacing.x = Tokens::S1 + 2.;
-                            for chip in [
-                                m.quant.clone().unwrap_or("—".into()),
-                                format!("{} capas", fmt(m.layers, 0)),
-                                format!("{}B params", fmt(m.params_b, 1)),
-                                format!("pesos {} GB", fmt_gb(m.weights_file_mi_b, 2)),
-                                format!("mmproj {} GB", fmt_gb(m.mmproj_size_mi_b, 2)),
-                            ] {
-                                widgets::chip(ui, &chip, t.surface_alt, t.text_dim);
-                            }
-                        });
+            // Ancho fijo: si no, las fichas se apilan una por línea.
+            let width = (ui.available_width() - Tokens::RELOAD_WIDTH).max(Tokens::DIALOG_MIN / 2.);
+            ui.allocate_ui_with_layout(
+                egui::vec2(width, 0.),
+                egui::Layout::top_down(egui::Align::Min),
+                |ui| {
+                    ui.spacing_mut().item_spacing.y = Tokens::S1;
+                    match &o.estimate {
+                        Some(e) => {
+                            let m = &e.model_meta;
+                            ui.label(
+                                RichText::new(&m.base)
+                                    .font(theme::font_semibold(Tokens::FONT_MD))
+                                    .color(t.text),
+                            );
+                            ui.horizontal_wrapped(|ui| {
+                                ui.spacing_mut().item_spacing.x = Tokens::S1 + 2.;
+                                let chips = [
+                                    m.quant.clone(),
+                                    m.layers.map(|_| format!("{} capas", fmt(m.layers, 0))),
+                                    m.params_b
+                                        .map(|_| format!("{}B params", fmt(m.params_b, 1))),
+                                    m.weights_file_mi_b.map(|_| {
+                                        format!("pesos {} GB", fmt_gb(m.weights_file_mi_b, 2))
+                                    }),
+                                    m.mmproj_size_mi_b.map(|_| {
+                                        format!("visión {} GB", fmt_gb(m.mmproj_size_mi_b, 2))
+                                    }),
+                                ];
+                                for chip in chips.iter().flatten() {
+                                    widgets::chip(ui, chip, t.surface_alt, t.text_dim);
+                                }
+                            });
+                        }
+                        None => {
+                            ui.label(
+                                RichText::new("Analizando el modelo…")
+                                    .font(theme::font_semibold(Tokens::FONT_MD))
+                                    .color(t.text),
+                            );
+                            widgets::dim(ui, "Detectando dispositivos y leyendo el header GGUF.");
+                        }
                     }
-                    None => {
-                        ui.label(
-                            RichText::new("Analizando el modelo…")
-                                .font(theme::font_semibold(Tokens::FONT_MD))
-                                .color(t.text),
-                        );
-                        widgets::dim(ui, "Detectando dispositivos y leyendo el header GGUF.");
-                    }
-                }
-            });
+                },
+            );
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 let clicked = widgets::enabled(ui, !o.loading && !o.calibrating, |ui| {
                     widgets::button(
@@ -230,6 +290,13 @@ fn model_header(ui: &mut egui::Ui, o: &Optimizer, reload: &mut bool) {
                 }
             });
         });
+        ui.add_space(Tokens::S3);
+        hint_label(
+            ui,
+            "Activa los parámetros que quieras fijar en el script y mira a la derecha si cabe \
+             en la VRAM. Los apagados se quedan con el valor por defecto de llama-server. \
+             Nada cambia en el script hasta «Aplicar al script».",
+        );
         if let Some(e) = &o.estimate
             && e.devices.is_empty()
         {
@@ -256,186 +323,257 @@ fn param_groups(ui: &mut egui::Ui, o: &mut Optimizer, ram_total: f64) {
         .estimate
         .as_ref()
         .is_some_and(|e| is_model_moe(Some(&e.model_meta.base)));
-    group(ui, icons::STACK, "Contexto y capas", |ui| {
-        slider(
-            ui,
-            &mut o.enabled,
-            "ctxSize",
-            "Contexto",
-            "--ctx-size",
-            &mut o.params.ctx_size,
-            512.0..=262144.0,
-            2048.,
-        );
-        slider(
-            ui,
-            &mut o.enabled,
-            "ngl",
-            "Capas en GPU",
-            "--n-gpu-layers",
-            &mut o.params.ngl,
-            0.0..=999.0,
-            1.,
-        );
-        if moe {
+    group(
+        ui,
+        icons::STACK,
+        "Contexto y capas",
+        "Lo que más cambia el uso de VRAM",
+        |ui| {
             slider(
                 ui,
                 &mut o.enabled,
-                "nCpuMoe",
-                "Expertos en CPU",
-                "--n-cpu-moe",
-                &mut o.params.n_cpu_moe,
-                0.0..=64.0,
+                "ctxSize",
+                "Contexto",
+                "--ctx-size",
+                "Tokens que el modelo recuerda a la vez. Después de los pesos, es lo que más VRAM usa.",
+                &mut o.params.ctx_size,
+                512.0..=262144.0,
+                2048.,
+            );
+            slider(
+                ui,
+                &mut o.enabled,
+                "ngl",
+                "Capas en GPU",
+                "--n-gpu-layers",
+                "Capas del modelo en la GPU (999 = todas). Menos capas liberan VRAM, pero va más lento.",
+                &mut o.params.ngl,
+                0.0..=999.0,
                 1.,
             );
-        }
-        slider(
-            ui,
-            &mut o.enabled,
-            "cacheReuse",
-            "Reutilizar caché",
-            "--cache-reuse",
-            &mut o.params.cache_reuse,
-            0.0..=8192.0,
-            64.,
-        );
-    });
-    group(ui, icons::SQUARES_FOUR, "Batch", |ui| {
-        slider(
-            ui,
-            &mut o.enabled,
-            "batchSize",
-            "Batch",
-            "--batch-size",
-            &mut o.params.batch_size,
-            64.0..=2048.0,
-            64.,
-        );
-        slider(
-            ui,
-            &mut o.enabled,
-            "ubatchSize",
-            "Micro-batch",
-            "--ubatch-size",
-            &mut o.params.ubatch_size,
-            32.0..=1024.0,
-            32.,
-        );
-    });
-    group(ui, icons::DATABASE, "KV cache", |ui| {
-        kv(
-            ui,
-            &mut o.enabled,
-            "cacheTypeK",
-            "Tipo K",
-            "--cache-type-k",
-            &mut o.params.cache_type_k,
-        );
-        kv(
-            ui,
-            &mut o.enabled,
-            "cacheTypeV",
-            "Tipo V",
-            "--cache-type-v",
-            &mut o.params.cache_type_v,
-        );
-        for (key, label, flag) in [
-            ("cacheTypeKDraft", "Tipo K draft", "--cache-type-k-draft"),
-            ("cacheTypeVDraft", "Tipo V draft", "--cache-type-v-draft"),
-        ] {
-            let mut value = o
-                .params
-                .extra
-                .get(key)
-                .and_then(|v| v.as_str())
-                .unwrap_or("q8_0")
-                .to_string();
-            kv(ui, &mut o.enabled, key, label, flag, &mut value);
-            o.params.extra.insert(key.into(), serde_json::json!(value));
-        }
-        widgets::toggle(
-            ui,
-            &mut o.params.flash_attn,
-            "Flash attention (--flash-attn)",
-        );
-    });
-    group(ui, icons::MEMORY, "Memoria y especulativo", |ui| {
-        slider(
-            ui,
-            &mut o.enabled,
-            "cacheRam",
-            "Caché en RAM",
-            "--cache-ram",
-            &mut o.params.cache_ram,
-            0.0..=ram_total,
-            1024.,
-        );
-        slider(
-            ui,
-            &mut o.enabled,
-            "specDraftMax",
-            "Tokens draft",
-            "--spec-draft-n-max",
-            &mut o.params.spec_draft_max,
-            0.0..=8.0,
-            1.,
-        );
-        let mut vision = !o.params.no_mmproj;
-        if widgets::toggle(ui, &mut vision, "Cargar visión (sin --no-mmproj)").changed() {
-            o.params.no_mmproj = !vision;
-        }
-    });
+            if moe {
+                slider(
+                    ui,
+                    &mut o.enabled,
+                    "nCpuMoe",
+                    "Expertos en CPU",
+                    "--n-cpu-moe",
+                    "Capas cuyos expertos se quedan en la CPU. En modelos MoE ahorra mucha VRAM.",
+                    &mut o.params.n_cpu_moe,
+                    0.0..=64.0,
+                    1.,
+                );
+            }
+            slider(
+                ui,
+                &mut o.enabled,
+                "cacheReuse",
+                "Reutilizar caché",
+                "--cache-reuse",
+                "Trozo mínimo (en tokens) para reaprovechar la caché entre peticiones parecidas. 0 = no.",
+                &mut o.params.cache_reuse,
+                0.0..=8192.0,
+                64.,
+            );
+        },
+    );
+    group(
+        ui,
+        icons::DATABASE,
+        "Caché KV",
+        "Memoria del contexto; cuantizarla la reduce",
+        |ui| {
+            kv(
+                ui,
+                &mut o.enabled,
+                "cacheTypeK",
+                "Tipo K",
+                "--cache-type-k",
+                "Precisión de las claves. Q8_0 usa la mitad que F16 casi sin perder calidad.",
+                &mut o.params.cache_type_k,
+            );
+            kv(
+                ui,
+                &mut o.enabled,
+                "cacheTypeV",
+                "Tipo V",
+                "--cache-type-v",
+                "Precisión de los valores. Cuantizada necesita flash attention.",
+                &mut o.params.cache_type_v,
+            );
+            for (key, label, flag, hint) in [
+                (
+                    "cacheTypeKDraft",
+                    "Tipo K draft",
+                    "--cache-type-k-draft",
+                    "Lo mismo para el modelo draft de la decodificación especulativa.",
+                ),
+                (
+                    "cacheTypeVDraft",
+                    "Tipo V draft",
+                    "--cache-type-v-draft",
+                    "Lo mismo para el modelo draft de la decodificación especulativa.",
+                ),
+            ] {
+                let mut value = o
+                    .params
+                    .extra
+                    .get(key)
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("q8_0")
+                    .to_string();
+                kv(ui, &mut o.enabled, key, label, flag, hint, &mut value);
+                o.params.extra.insert(key.into(), serde_json::json!(value));
+            }
+            switch_row(
+                ui,
+                &mut o.params.flash_attn,
+                "Flash attention",
+                "--flash-attn",
+                "Atención más rápida y con menos memoria. Recomendado.",
+            );
+        },
+    );
+    group(
+        ui,
+        icons::SQUARES_FOUR,
+        "Batch",
+        "Velocidad al procesar el prompt; más alto usa algo más de VRAM",
+        |ui| {
+            slider(
+                ui,
+                &mut o.enabled,
+                "batchSize",
+                "Batch",
+                "--batch-size",
+                "Tokens del prompt por paso lógico.",
+                &mut o.params.batch_size,
+                64.0..=2048.0,
+                64.,
+            );
+            slider(
+                ui,
+                &mut o.enabled,
+                "ubatchSize",
+                "Micro-batch",
+                "--ubatch-size",
+                "Tokens por paso real en la GPU; no debe superar al batch.",
+                &mut o.params.ubatch_size,
+                32.0..=1024.0,
+                32.,
+            );
+        },
+    );
+    group(
+        ui,
+        icons::MEMORY,
+        "Memoria y especulativo",
+        "Caché en RAM, decodificación especulativa y visión",
+        |ui| {
+            slider(
+                ui,
+                &mut o.enabled,
+                "cacheRam",
+                "Caché en RAM",
+                "--cache-ram",
+                "MiB de RAM para guardar prompts ya procesados y reutilizarlos. 0 = no.",
+                &mut o.params.cache_ram,
+                0.0..=ram_total,
+                1024.,
+            );
+            slider(
+                ui,
+                &mut o.enabled,
+                "specDraftMax",
+                "Tokens draft",
+                "--spec-draft-n-max",
+                "Tokens que propone el modelo draft en cada paso.",
+                &mut o.params.spec_draft_max,
+                0.0..=8.0,
+                1.,
+            );
+            let mut vision = !o.params.no_mmproj;
+            ui.horizontal(|ui| {
+                if widgets::toggle(ui, &mut vision, "Cargar visión").changed() {
+                    o.params.no_mmproj = !vision;
+                }
+            });
+            indented(ui, |ui| {
+                hint_label(
+                    ui,
+                    "Carga el proyector de imágenes (mmproj). Apagado añade --no-mmproj y ahorra su VRAM.",
+                )
+            });
+        },
+    );
     if let Some(e) = &o.estimate {
         let devices: Vec<_> = e.devices.clone();
-        group(ui, icons::CPU, "Dispositivos", |ui| {
-            widgets::toggle(
-                ui,
-                o.enabled.entry("device".into()).or_default(),
-                "Fijar dispositivos (--device)",
-            );
-            for d in &devices {
-                let mut selected = o.params.device.contains(&d.id);
-                if ui
-                    .checkbox(
-                        &mut selected,
-                        format!(
-                            "{} · {} ({} GB, {} libres)",
-                            d.id,
-                            gpu_short_name(&d.name),
-                            fmt_gb(Some(d.total_mi_b), 1),
-                            fmt_gb(Some(d.free_mi_b), 1)
-                        ),
-                    )
-                    .changed()
-                {
-                    if selected {
-                        o.params.device.push(d.id.clone());
-                    } else {
-                        o.params.device.retain(|id| id != &d.id);
+        group(
+            ui,
+            icons::CPU,
+            "Dispositivos",
+            "Qué GPUs usar y cómo repartir el modelo",
+            |ui| {
+                switch_row(
+                    ui,
+                    o.enabled.entry("device".into()).or_default(),
+                    "Fijar dispositivos",
+                    "--device",
+                    "Usa solo las GPUs marcadas. Apagado, llama-server usa todas.",
+                );
+                indented(ui, |ui| {
+                    for d in &devices {
+                        let mut selected = o.params.device.contains(&d.id);
+                        if ui
+                            .checkbox(
+                                &mut selected,
+                                format!(
+                                    "{} · {} ({} GB, {} libres)",
+                                    d.id,
+                                    gpu_short_name(&d.name),
+                                    fmt_gb(Some(d.total_mi_b), 1),
+                                    fmt_gb(Some(d.free_mi_b), 1)
+                                ),
+                            )
+                            .changed()
+                        {
+                            if selected {
+                                o.params.device.push(d.id.clone());
+                            } else {
+                                o.params.device.retain(|id| id != &d.id);
+                            }
+                            o.params.tensor_split = None;
+                        }
                     }
-                    o.params.tensor_split = None;
+                });
+                ui.add_space(Tokens::S3);
+                let chosen = selected_devices(&devices, &o.params.device);
+                let mut auto = o.params.tensor_split.is_none();
+                if widgets::toggle(ui, &mut auto, "Reparto automático").changed() {
+                    o.params.tensor_split = if auto {
+                        None
+                    } else {
+                        Some(vec![1.; chosen.len()])
+                    };
                 }
-            }
-            let chosen = selected_devices(&devices, &o.params.device);
-            let mut auto = o.params.tensor_split.is_none();
-            if widgets::toggle(ui, &mut auto, "Tensor split automático").changed() {
-                o.params.tensor_split = if auto {
-                    None
-                } else {
-                    Some(vec![1.; chosen.len()])
-                };
-            }
-            if let Some(split) = &mut o.params.tensor_split {
-                split.resize(chosen.len(), 1.);
-                for (d, value) in chosen.iter().zip(split.iter_mut()) {
-                    widgets::field_label(ui, &d.id, Some(&gpu_short_name(&d.name)));
-                    slider_control(ui, value, 0.0..=10.0, 0.1);
-                }
-                if split.iter().all(|v| *v == 0.) {
-                    o.params.tensor_split = None;
-                }
-            }
-        });
+                indented(ui, |ui| {
+                    hint_label(
+                        ui,
+                        "Apagado puedes fijar qué proporción del modelo va a cada GPU (--tensor-split).",
+                    );
+                    if let Some(split) = &mut o.params.tensor_split {
+                        split.resize(chosen.len(), 1.);
+                        for (d, value) in chosen.iter().zip(split.iter_mut()) {
+                            widgets::field_label(ui, &d.id, Some(&gpu_short_name(&d.name)));
+                            slider_control(ui, value, 0.0..=10.0, 0.1);
+                        }
+                        if split.iter().all(|v| *v == 0.) {
+                            o.params.tensor_split = None;
+                        }
+                    }
+                });
+            },
+        );
     }
 }
 
@@ -530,6 +668,30 @@ fn usage(ui: &mut egui::Ui, s: &mut Store, o: &mut Optimizer) {
         ];
         widgets::stacked_bar(ui, &segments, capacity);
         ui.add_space(Tokens::S2);
+        // Veredicto primero: lo que hay que mirar al mover un control.
+        if capacity > 0. {
+            if total > capacity {
+                widgets::banner(
+                    ui,
+                    NoticeKind::Error,
+                    &format!(
+                        "No cabe: faltan {} GB. Baja el contexto, cuantiza la caché KV o deja \
+                         capas o expertos en la CPU.",
+                        fmt_gb(Some(total - capacity), 2)
+                    ),
+                );
+            } else {
+                widgets::banner(
+                    ui,
+                    NoticeKind::Success,
+                    &format!(
+                        "Cabe: quedan {} GB libres.",
+                        fmt_gb(Some(capacity - total), 2)
+                    ),
+                );
+            }
+            ui.add_space(Tokens::S2);
+        }
         for ((value, color), label) in
             segments
                 .iter()
@@ -540,14 +702,6 @@ fn usage(ui: &mut egui::Ui, s: &mut Store, o: &mut Optimizer) {
                 *color,
                 label,
                 &format!("{} GB", fmt_gb(Some(*value), 2)),
-            );
-        }
-        if total > capacity && capacity > 0. {
-            ui.add_space(Tokens::S1);
-            widgets::banner(
-                ui,
-                NoticeKind::Error,
-                "La configuración actual excede la VRAM disponible.",
             );
         }
         ui.add_space(Tokens::S3);
@@ -563,6 +717,9 @@ fn usage(ui: &mut egui::Ui, s: &mut Store, o: &mut Optimizer) {
         }
         ui.add_space(Tokens::S2);
         widgets::toggle(ui, &mut o.count_used, "Contar la VRAM ya en uso");
+        indented(ui, |ui| {
+            hint_label(ui, "Suma lo que ya ocupan otros programas en las GPUs.")
+        });
         if let Some(c) = &o.calibration {
             widgets::banner(
                 ui,
@@ -581,9 +738,16 @@ fn usage(ui: &mut egui::Ui, s: &mut Store, o: &mut Optimizer) {
             ui,
             icons::RULER,
             "Calibrar",
-            Some("Arranca llama-server un momento para medir el consumo real"),
+            Some("Mide el consumo real en vez de estimarlo"),
             |_| {},
         );
+        ui.add_space(Tokens::S2);
+        hint_label(
+            ui,
+            "La estimación es aproximada. Calibrar arranca llama-server unos segundos con \
+             estos ajustes y corrige la cifra con lo medido.",
+        );
+        ui.add_space(Tokens::S2);
         if o.calibrating {
             widgets::banner(ui, NoticeKind::Warning, "Midiendo…");
             if widgets::button_wide(
@@ -624,113 +788,104 @@ fn usage(ui: &mut egui::Ui, s: &mut Store, o: &mut Optimizer) {
     });
 }
 
-pub fn show(ui: &mut egui::Ui, s: &mut Store) {
+/// Diálogo del optimizador sobre la página actual; cerrarlo equivale a «Cancelar».
+pub fn show(ctx: &egui::Context, s: &mut Store) {
     let Some(mut o) = s.optimizer.take() else {
-        widgets::card(ui, |ui| {
-            widgets::empty_state(
-                ui,
-                icons::LIGHTNING,
-                "Optimizador",
-                "Analiza el script actual para estimar cuánta VRAM necesita.",
-            );
-            ui.vertical_centered(|ui| {
-                if widgets::button(
-                    ui,
-                    Kind::Primary,
-                    Some(icons::LIGHTNING),
-                    "Analizar script actual",
-                )
-                .clicked()
-                {
-                    open(s);
-                }
-            });
-            ui.add_space(Tokens::S4);
-        });
         return;
     };
-    let t = Tokens::get(ui.ctx());
     let mut apply = false;
     let mut reload = false;
     let mut cancelled = false;
-    // Pie fijo con las acciones; el resto de la página se desplaza por encima.
-    egui::Panel::bottom("optimizer-actions")
-        .resizable(false)
-        .show_separator_line(false)
-        .frame(egui::Frame::new().fill(t.bg).inner_margin(egui::Margin {
-            top: Tokens::S3 as i8,
-            ..Default::default()
-        }))
-        .show(ui, |ui| {
-            ui.horizontal(|ui| {
-                if widgets::enabled(ui, !o.calibrating, |ui| {
-                    widgets::button(ui, Kind::Ghost, Some(icons::ARROWS_CLOCKWISE), "Default")
-                        .on_hover_text("Valores por defecto de llama-server")
-                        .clicked()
-                }) {
-                    o.reset();
-                }
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if widgets::enabled(ui, !o.loading && !o.calibrating, |ui| {
-                        widgets::button(ui, Kind::Primary, Some(icons::CHECK), "Aplicar al script")
-                            .clicked()
-                    }) {
-                        apply = true;
-                    }
-                    if widgets::button(ui, Kind::Secondary, None, "Cancelar").clicked() {
-                        cancelled = true;
-                    }
-                });
-            });
-        });
-    egui::ScrollArea::vertical()
-        .id_salt("optimizer-page")
-        .auto_shrink(false)
-        .show(ui, |ui| {
+    let dialog = widgets::dialog(ctx, "optimizer", "Optimizador", Tokens::DIALOG_LG, |ui| {
+        // Los parámetros se desplazan y el pie con las acciones queda siempre visible.
+        let body = ctx.content_rect().height()
+            - Tokens::DIALOG_CHROME
+            - Tokens::S5 * 2.
+            - Tokens::DIALOG_FOOTER;
+        let body = body.max(Tokens::ROW);
+        let ram = s.ram.mem_total_mi_b.unwrap_or(32768.);
+        let width = ui.available_width();
+        if width >= Tokens::TWO_COLUMNS {
+            // Ancha: el modelo arriba y el consumo siempre a la vista mientras los
+            // parámetros se desplazan.
+            let top = ui.cursor().top();
             model_header(ui, &o, &mut reload);
             ui.add_space(Tokens::S4);
-            let ram = s.ram.mem_total_mi_b.unwrap_or(32768.);
-            let width = ui.available_width();
-            {
-                if width >= Tokens::TWO_COLUMNS {
-                    let gap = Tokens::S4;
-                    let right = (width - gap) * Tokens::SIDE_COLUMN;
-                    let left = width - gap - right;
-                    ui.horizontal_top(|ui| {
-                        ui.spacing_mut().item_spacing.x = gap;
-                        ui.allocate_ui_with_layout(
-                            egui::vec2(left, 0.),
-                            egui::Layout::top_down(egui::Align::Min),
-                            |ui| {
-                                ui.set_width(left);
-                                params(ui, &mut o, ram);
-                            },
-                        );
-                        ui.allocate_ui_with_layout(
-                            egui::vec2(right, 0.),
-                            egui::Layout::top_down(egui::Align::Min),
-                            |ui| {
-                                ui.set_width(right);
-                                usage(ui, s, &mut o);
-                            },
-                        );
-                    });
-                } else {
+            let columns = (body - (ui.cursor().top() - top)).max(Tokens::ROW);
+            let gap = Tokens::S4;
+            let right = (width - gap) * Tokens::SIDE_COLUMN;
+            let left = width - gap - right;
+            ui.horizontal_top(|ui| {
+                ui.spacing_mut().item_spacing.x = gap;
+                ui.allocate_ui_with_layout(
+                    egui::vec2(left, columns),
+                    egui::Layout::top_down(egui::Align::Min),
+                    |ui| {
+                        egui::ScrollArea::vertical()
+                            .id_salt("optimizer-params")
+                            .max_height(columns)
+                            .auto_shrink([false, true])
+                            .show(ui, |ui| params(ui, &mut o, ram));
+                    },
+                );
+                ui.allocate_ui_with_layout(
+                    egui::vec2(right, columns),
+                    egui::Layout::top_down(egui::Align::Min),
+                    |ui| {
+                        egui::ScrollArea::vertical()
+                            .id_salt("optimizer-usage")
+                            .max_height(columns)
+                            .auto_shrink([false, true])
+                            .show(ui, |ui| usage(ui, s, &mut o));
+                    },
+                );
+            });
+        } else {
+            egui::ScrollArea::vertical()
+                .id_salt("optimizer-body")
+                .max_height(body)
+                .show(ui, |ui| {
+                    model_header(ui, &o, &mut reload);
+                    ui.add_space(Tokens::S4);
                     usage(ui, s, &mut o);
                     ui.add_space(Tokens::S3);
                     params(ui, &mut o, ram);
-                }
+                });
+        }
+        widgets::dialog_footer(ui, |ui| {
+            if widgets::enabled(ui, !o.loading && !o.calibrating, |ui| {
+                widgets::button(ui, Kind::Primary, Some(icons::CHECK), "Aplicar al script")
+                    .clicked()
+            }) {
+                apply = true;
             }
+            if widgets::button(ui, Kind::Secondary, None, "Cancelar").clicked() {
+                cancelled = true;
+            }
+            ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
+                if widgets::enabled(ui, !o.calibrating, |ui| {
+                    widgets::button(
+                        ui,
+                        Kind::Ghost,
+                        Some(icons::ARROWS_CLOCKWISE),
+                        "Restablecer",
+                    )
+                    .on_hover_text("Vuelve a los valores por defecto de llama-server")
+                    .clicked()
+                }) {
+                    o.reset();
+                }
+            });
         });
+    });
     if apply {
         s.script = apply_tuned_params(&s.script, &o.params, &o.enabled);
         s.notice("Parámetros aplicados al script");
         s.tab = TAB_BENCH;
-    } else if cancelled {
+    } else if cancelled || dialog.close {
         if o.calibrating {
             s.actions.push(Action::Cancel);
         }
-        s.tab = TAB_BENCH;
     } else {
         s.optimizer = Some(o);
         if reload {

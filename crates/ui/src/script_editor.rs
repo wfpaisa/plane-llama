@@ -1,7 +1,7 @@
 // Tarjeta del script de llama-server y catálogo de flags para agregarlos con un clic.
 use crate::theme::{self, Tokens};
 use crate::widgets::{self, Kind, icons};
-use crate::{bridge::Action, sidebar, store::Store, store::TAB_OPTIMIZER};
+use crate::{bridge::Action, store::Store};
 use egui::RichText;
 use plane_llama_core::{
     client::{
@@ -60,11 +60,11 @@ pub fn show(ui: &mut egui::Ui, s: &mut Store) {
             "Script del servidor",
             Some("Comando de llama-server"),
             |ui| {
-                if widgets::button(ui, Kind::Secondary, Some(icons::LIGHTNING), "Optimizar")
+                if widgets::button(ui, Kind::Primary, Some(icons::LIGHTNING), "Optimizar")
                     .on_hover_text("Ajustar parámetros según la VRAM")
                     .clicked()
                 {
-                    sidebar::go(s, TAB_OPTIMIZER);
+                    crate::optimizer_modal::open(s);
                 }
                 if widgets::icon_button(ui, icons::BOOK_OPEN_TEXT, "Catálogo de flags").clicked() {
                     s.flags_open = true;

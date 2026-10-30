@@ -15,21 +15,13 @@ use std::{
 
 pub const TAB_BENCH: usize = 0;
 pub const TAB_HISTORY: usize = 2;
-pub const TAB_OPTIMIZER: usize = 3;
 pub const TAB_LOGS: usize = 4;
 pub const TAB_SCRIPTS: usize = 5;
 pub const TAB_MODELS: usize = 6;
 const SIMPLE_KEY: &str = "plane-llama-simple";
 /// Última página abierta en la vista ampliada.
 const EXTENDED_TAB_KEY: &str = "plane-llama-extended-tab";
-const TABS: [usize; 6] = [
-    TAB_BENCH,
-    TAB_HISTORY,
-    TAB_OPTIMIZER,
-    TAB_LOGS,
-    TAB_SCRIPTS,
-    TAB_MODELS,
-];
+const TABS: [usize; 5] = [TAB_BENCH, TAB_HISTORY, TAB_LOGS, TAB_SCRIPTS, TAB_MODELS];
 /// Vista guardada en `ui.ron`, para crear la primera ventana con su tamaño; antes de
 /// que eframe abra el almacenamiento. Por defecto, la simple.
 pub fn saved_simple(path: &std::path::Path) -> bool {

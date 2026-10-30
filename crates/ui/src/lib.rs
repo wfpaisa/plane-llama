@@ -192,13 +192,9 @@ impl App {
                 "Historial",
                 format!("{} resultados guardados", s.history.len()),
             ),
-            store::TAB_OPTIMIZER => (
-                "Optimizador",
-                "Ajusta parámetros según la VRAM, sin arrancar el servidor".into(),
-            ),
             store::TAB_LOGS => ("Logs", "Salida en tiempo real de llama-server".into()),
             _ => (
-                "Benchmark",
+                "Editor",
                 "Configura el servidor, lanza una prueba y revisa el resultado".into(),
             ),
         }
@@ -324,6 +320,7 @@ impl App {
         let s = &mut self.store;
         compare_modal::show(&ctx, s);
         chart_modal::show(&ctx, s);
+        optimizer_modal::show(&ctx, s);
         script_editor::catalog(&ctx, s);
         scripts_page::editor_dialog(&ctx, s);
         models_page::fetch_dialog(&ctx, s);
@@ -526,7 +523,6 @@ fn page(ui: &mut egui::Ui, s: &mut Store) {
         store::TAB_SCRIPTS => scripts_page::show(ui, s),
         store::TAB_MODELS => models_page::show(ui, s),
         store::TAB_HISTORY => history_table::show(ui, s),
-        store::TAB_OPTIMIZER => optimizer_modal::show(ui, s),
         store::TAB_LOGS => logs_viewer::show(ui, s),
         _ => {
             egui::ScrollArea::vertical()

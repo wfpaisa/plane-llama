@@ -243,14 +243,17 @@ async fn render_pages() {
     {
         let s = &mut h.state_mut().as_mut().unwrap().store;
         s.chart = false;
-        s.tab = store::TAB_OPTIMIZER;
         optimizer_modal::open(s);
         s.actions.clear();
         let id = s.optimizer_serial;
         s.receive(Message::Estimate(id, Box::new(estimate())));
     }
     shot(&mut h, "05-optimizador");
-    h.state_mut().as_mut().unwrap().store.tab = store::TAB_LOGS;
+    {
+        let s = &mut h.state_mut().as_mut().unwrap().store;
+        s.optimizer = None;
+        s.tab = store::TAB_LOGS;
+    }
     shot(&mut h, "06-logs");
     {
         let s = &mut h.state_mut().as_mut().unwrap().store;

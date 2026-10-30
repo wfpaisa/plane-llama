@@ -90,6 +90,10 @@ pub fn show(ui: &mut egui::Ui, title: &str, subtitle: &str) -> Clicks {
                         (icons::MINUS, "Minimizar", Command::Minimized(true), false),
                     ] {
                         if caption(ui, icon, label, danger).clicked() {
+                            // Mientras sigue marcada como diálogo para centrarla, Mutter
+                            // no la deja minimizar ni maximizar: vuelve a ser normal antes.
+                            #[cfg(target_os = "linux")]
+                            crate::center::placed();
                             ui.ctx().send_viewport_cmd(cmd);
                         }
                     }
@@ -118,6 +122,8 @@ pub fn show(ui: &mut egui::Ui, title: &str, subtitle: &str) -> Clicks {
                     let rect = ui.available_rect_before_wrap();
                     let response = ui.allocate_rect(rect, egui::Sense::click_and_drag());
                     if response.double_clicked() {
+                        #[cfg(target_os = "linux")]
+                        crate::center::placed();
                         ui.ctx().send_viewport_cmd(Command::Maximized(!maximized));
                     } else if response.drag_started() {
                         crate::window::start_drag(ui.ctx());
