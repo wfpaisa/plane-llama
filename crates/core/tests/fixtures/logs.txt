@@ -1,0 +1,49 @@
+# log_debug.txt — volcado del último benchmark
+# Generado: 2026-08-01T21:39:30.193Z
+# Líneas en el slice: 22
+# Mostrando las últimas 1000 líneas.
+
+## Métricas parseadas (null = no encontrada en el slice)
+{
+  "promptTokensPerSecond": 532.14,
+  "promptTokenCount": 86,
+  "promptEvalTimeMs": 161.61,
+  "generationTokensPerSecond": 132.37,
+  "generationTokenCount": 2048,
+  "draftAcceptance": 0.65125,
+  "genDrafts": 2271,
+  "accDrafts": 1479,
+  "loadTimeSeconds": 2.136,
+  "generationTimeMs": 15471.49
+}
+
+## Contexto del run
+- requestLatencyMs: 15676
+- maxTokens: 2048
+- líneas en el slice: 22
+- métricas en null: ninguna
+
+## Slice de logs (cola)
+
+[system] [backend] benchmark: iniciando llama-server…
+[system] [backend] spawn: /home/projects/ia/llama.cpp_cuda/build/bin/llama-server -hf DavidAU/Qwen3.5-9B-The-Defiant-Fable-Uncensored-Heretic-NEO-IMATRIX-MAX-MTP-GGUF:Q6_K --n-gpu-layers 999 --ctx-size 60000 --cache-type-k q8_0 --cache-type-v q8_0 --cache-type-k-draft q8_0 --cache-type-v-draft q8_0 --jinja --temp 0.6 --top-p 0.95 --top-k 20 --spec-type draft-mtp --spec-draft-n-max 4 --device CUDA0 --batch-size 2048 --ubatch-size 512 --no-mmproj --flash-attn on --cache-ram 8192  (cwd=/home/projects/ia/llama.cpp_cuda/build/bin)
+0.00.546.807 I cmn  common_param: common_params_print_info: verbosity = 3 (adjust with the `-lv N` CLI arg)
+0.00.882.049 I srv    load_model: loading model 'DavidAU/Qwen3.5-9B-The-Defiant-Fable-Uncensored-Heretic-NEO-IMATRIX-MAX-MTP-GGUF:Q6_K'
+0.02.953.593 I srv    load_model: initializing, n_slots = 4, n_ctx_slot = 60160, kv_unified = 'true'
+0.03.018.395 I srv  llama_server: model loaded
+0.03.018.401 I srv  llama_server: listening on http://127.0.0.1:8080
+[system] [backend] llama-server listo (server is listening).
+[system] [backend] benchmark: servidor responde, ejecutando request…
+0.03.075.975 I slot get_availabl: id  3 | task -1 | selected slot by LRU, t_last = -1
+0.03.076.074 I slot launch_slot_: id  3 | task 0 | processing task, is_child = 0
+0.06.253.552 I slot print_timing: id  3 | task 0 | n_decoded =    362, tg = 120.06 t/s, tg_3s = 120.06 t/s
+0.09.277.999 I slot print_timing: id  3 | task 0 | n_decoded =    842, tg = 139.41 t/s, tg_3s = 158.71 t/s
+0.12.288.018 I slot print_timing: id  3 | task 0 | n_decoded =   1215, tg = 134.26 t/s, tg_3s = 123.92 t/s
+0.15.290.014 I slot print_timing: id  3 | task 0 | n_decoded =   1584, tg = 131.43 t/s, tg_3s = 122.92 t/s
+0.18.294.018 I slot print_timing: id  3 | task 0 | n_decoded =   1974, tg = 131.11 t/s, tg_3s = 129.83 t/s
+0.18.709.820 I slot print_timing: id  3 | task 0 | prompt eval time =     161.61 ms /    86 tokens (    1.88 ms per token,   532.14 tokens per second)
+0.18.709.824 I slot print_timing: id  3 | task 0 |        eval time =   15471.49 ms /  2048 tokens (    7.55 ms per token,   132.37 tokens per second)
+0.18.709.825 I slot print_timing: id  3 | task 0 |       total time =   15633.10 ms /  2134 tokens
+0.18.709.825 I slot print_timing: id  3 | task 0 |    graphs reused =        559
+0.18.709.827 I slot print_timing: id  3 | task 0 | draft acceptance = 0.65125 ( 1479 accepted /  2271 generated), mean len =  3.60
+0.18.709.851 I slot      release: id  3 | task 0 | stop processing: n_tokens = 2133, truncated = 0

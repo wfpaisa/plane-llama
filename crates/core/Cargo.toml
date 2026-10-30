@@ -1,0 +1,36 @@
+[package]
+name = "plane-llama-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+autotests = false
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+tokio = { version = "1", features = ["full"] }
+tokio-util = "0.7"
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
+regex = "1"
+dirs = "6"
+parking_lot = "0.12"
+log = "0.4"
+env_logger = "0.11"
+nix = { version = "0.30", features = ["signal", "process"] }
+which = "8"
+chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "1", features = ["v4"] }
+icu_collator = "2"
+icu_locale = "2"
+
+[dev-dependencies]
+tempfile = "3"
+
+[[test]]
+name = "pure"
+path = "tests/pure.rs"
+
+[[test]]
+name = "phase2"
+path = "tests/phase2.rs"
