@@ -106,16 +106,13 @@ pub fn show(ui: &mut egui::Ui, s: &mut Store) {
             },
         );
         let pasted = ui.input(|i| i.events.iter().any(|e| matches!(e, egui::Event::Paste(_))));
-        let edited = widgets::sunken(ui, |ui| {
-            ui.add(
-                egui::TextEdit::multiline(&mut s.script)
-                    .code_editor()
-                    .frame(egui::Frame::new())
-                    .hint_text("llama-server -hf org/modelo:Q4_K_M --ctx-size 8192 …")
-                    .desired_rows(Tokens::EDITOR_ROWS)
-                    .desired_width(f32::INFINITY),
-            )
-        });
+        let edited = code_box(
+            ui,
+            "script-editor",
+            &mut s.script,
+            Tokens::EDITOR_ROWS,
+            "llama-server -hf org/modelo:Q4_K_M --ctx-size 8192 …",
+        );
         if edited.changed() {
             s.script_seeded = true;
             if pasted {
@@ -299,5 +296,140 @@ pub fn catalog(ctx: &egui::Context, s: &mut Store) {
     );
     if dialog.close {
         s.flags_open = false;
+    }
+}
+
+/// Caja de edición de un script: números de línea, flags resaltados y borde de acento
+/// con el foco. La usan el Editor y el diálogo de scripts.
+pub fn code_box(
+    ui: &mut egui::Ui,
+    id_salt: &str,
+    script: &mut String,
+    rows: usize,
+    hint: &str,
+) -> egui::Response {
+    let t = Tokens::get(ui.ctx());
+    let id = ui.make_persistent_id(id_salt);
+    let focused = ui.memory(|m| m.has_focus(id));
+    let font = egui::TextStyle::Monospace.resolve(ui.style());
+    let digits = script.lines().count().max(1).to_string().len().max(2) as f32;
+    let gutter = ui.fonts_mut(|f| f.glyph_width(&font, '0')) * digits + Tokens::S3;
+    // El grosor del borde no cambia con el foco: el Frame lo suma al tamaño y desplazaría
+    // el contenido; el realce va como un trazo pintado encima, hacia dentro.
+    let color = if focused { t.accent } else { t.border };
+    let frame = egui::Frame::new()
+        .fill(t.sunken)
+        .stroke(egui::Stroke::new(Tokens::BORDER, color))
+        .corner_radius(Tokens::RADIUS_MD)
+        .inner_margin(egui::Margin {
+            left: Tokens::S2 as i8,
+            right: Tokens::S3 as i8,
+            top: Tokens::S3 as i8,
+            bottom: Tokens::S3 as i8,
+        })
+        .show(ui, |ui| {
+            ui.set_min_width(ui.available_width());
+            ui.horizontal_top(|ui| {
+                ui.spacing_mut().item_spacing.x = 0.;
+                let (gutter_rect, _) =
+                    ui.allocate_exact_size(egui::vec2(gutter, 0.), egui::Sense::hover());
+                let mut layouter = |ui: &egui::Ui, text: &dyn egui::TextBuffer, wrap: f32| {
+                    let mut job = highlight(text.as_str(), &font, &t);
+                    job.wrap.max_width = wrap;
+                    ui.fonts_mut(|f| f.layout_job(job))
+                };
+                let output = egui::TextEdit::multiline(script)
+                    .id(id)
+                    .code_editor()
+                    .frame(egui::Frame::new())
+                    .hint_text(hint)
+                    .desired_rows(rows)
+                    .desired_width(f32::INFINITY)
+                    .layouter(&mut layouter)
+                    .show(ui);
+                // Un número por línea del script, en la fila donde empieza (con ajuste
+                // de línea, las filas siguientes no llevan número).
+                let mut line = 1;
+                let mut starts = true;
+                for row in &output.galley.rows {
+                    if starts {
+                        ui.painter().text(
+                            egui::pos2(
+                                gutter_rect.right() - Tokens::S2,
+                                output.galley_pos.y + row.rect().min.y,
+                            ),
+                            egui::Align2::RIGHT_TOP,
+                            line.to_string(),
+                            font.clone(),
+                            t.text_faint,
+                        );
+                        line += 1;
+                    }
+                    starts = row.ends_with_newline;
+                }
+                output.response.response
+            })
+            .inner
+        });
+    if focused {
+        ui.painter().rect_stroke(
+            frame.response.rect,
+            Tokens::RADIUS_MD,
+            egui::Stroke::new(Tokens::BORDER + 1., t.accent),
+            egui::StrokeKind::Inside,
+        );
+    }
+    frame.inner
+}
+
+/// Colores del script: binario atenuado, flags en acento y `\` de continuación tenue.
+fn highlight(text: &str, font: &egui::FontId, t: &Tokens) -> egui::text::LayoutJob {
+    let mut job = egui::text::LayoutJob::default();
+    let format = |color| egui::TextFormat::simple(font.clone(), color);
+    let mut first = true;
+    let mut rest = text;
+    while !rest.is_empty() {
+        let space = rest
+            .find(|c: char| !c.is_whitespace())
+            .unwrap_or(rest.len());
+        if space > 0 {
+            job.append(&rest[..space], 0., format(t.text));
+            rest = &rest[space..];
+            continue;
+        }
+        let end = rest.find(char::is_whitespace).unwrap_or(rest.len());
+        let word = &rest[..end];
+        let color = if first {
+            t.text_dim
+        } else if word == "\\" {
+            t.text_faint
+        } else if is_flag(word) {
+            t.accent_ink
+        } else {
+            t.text
+        };
+        first = false;
+        job.append(word, 0., format(color));
+        rest = &rest[end..];
+    }
+    job
+}
+/// `-x` o `--flag`, pero no un número negativo.
+fn is_flag(word: &str) -> bool {
+    word.len() > 1
+        && word.starts_with('-')
+        && !word[1..].starts_with(|c: char| c.is_ascii_digit() || c == '.')
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn flags_are_not_negative_numbers() {
+        assert!(is_flag("--ctx-size"));
+        assert!(is_flag("-hf"));
+        assert!(!is_flag("-1"));
+        assert!(!is_flag("-"));
+        assert!(!is_flag("q8_0"));
     }
 }

@@ -312,9 +312,14 @@ fn history_favorites_and_ten_star_rating_dispatch_nullable_patch() {
 }
 
 #[test]
-fn desktop_settings_copy_and_remove_script() {
+fn desktop_settings_pick_saved_launch_script() {
+    let saved = vec![plane_llama_core::scripts::SavedScript::new(
+        "Mi script",
+        "llama-server --port 8111",
+    )];
+    let id = saved[0].id.clone();
     let mut h = Harness::new_ui_state(
-        |ui, settings| plane_llama_ui::settings::controls(ui, settings, "llama-server --port 8111"),
+        move |ui, settings| plane_llama_ui::settings::controls(ui, settings, &saved),
         plane_llama_core::desktop::AppSettings::default(),
     );
     h.get_by_label("Al cerrar, mantener en la bandeja").click();
@@ -327,15 +332,23 @@ fn desktop_settings_copy_and_remove_script() {
         .click();
     h.run();
     assert!(!h.state().autostart_hidden);
-    h.get_by_label("Usar el script actual del editor").click();
+    h.get_by_role(egui::accesskit::Role::ComboBox).click();
     h.run();
-    assert_eq!(
-        h.state().launch_script.as_deref(),
-        Some("llama-server --port 8111")
+    h.get_by_label("Mi script").click();
+    h.run();
+    assert_eq!(h.state().launch_script_id.as_deref(), Some(id.as_str()));
+    assert!(
+        h.state()
+            .launch_script
+            .as_deref()
+            .is_some_and(|s| s.contains("--port 8111"))
     );
-    h.get_by_label("Quitar").click();
+    h.get_by_role(egui::accesskit::Role::ComboBox).click();
+    h.run();
+    h.get_by_label("Ninguno").click();
     h.run();
     assert!(h.state().launch_script.is_none());
+    assert!(h.state().launch_script_id.is_none());
 }
 
 /// Scripts: el ojo de cada fila oculta el script y, en orden manual, arrastrar una fila
@@ -669,4 +682,31 @@ fn history_cells_text_can_be_copied() {
         .iter()
         .any(|c| matches!(c, egui::OutputCommand::CopyText(t) if t.contains("uno")));
     assert!(copied, "{:?}", h.output().platform_output.commands);
+}
+
+/// Mientras el servidor carga el modelo, la fila del script arrancado ofrece «Detener»
+/// y las demás quedan bloqueadas.
+#[test]
+fn scripts_loading_row_can_be_stopped() {
+    use plane_llama_ui::{bridge::Action, scripts_page};
+    let mut s = Store::default();
+    s.library.list = vec![
+        scripts::SavedScript::new("Alfa", "llama-server -hf unsloth/A-GGUF:Q8_0"),
+        scripts::SavedScript::new("Beta", "llama-server -hf bartowski/B-GGUF:Q4_K_M"),
+    ];
+    s.library.loaded = true;
+    s.refresh_library();
+    s.library.started = Some(s.library.list[0].script.clone());
+    s.status.status = "starting".into();
+    s.status.started_at = Some(chrono::Utc::now().to_rfc3339());
+    let mut h = Harness::builder()
+        .with_size(egui::vec2(1000., 500.))
+        .build_ui_state(scripts_page::show, s);
+    // La carga pide repintar sin parar: unos pasos bastan.
+    h.run_steps(2);
+    use egui_kittest::kittest::NodeT;
+    assert!(h.get_by_label("Iniciar").accesskit_node().is_disabled());
+    h.get_by_label("Detener").click();
+    h.run_steps(2);
+    assert!(h.state().actions.iter().any(|a| matches!(a, Action::Stop)));
 }

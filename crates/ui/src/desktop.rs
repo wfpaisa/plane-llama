@@ -26,6 +26,9 @@ pub struct Desktop {
     pub window: Mutex<WindowSizes>,
     /// La ventana se cierra para volver a crearse con otro tamaño, no para ir a la bandeja.
     pub reopening: AtomicBool,
+    /// Script con el que se arrancó el servidor desde la app; sobrevive a la ventana
+    /// (cambiar de vista la vuelve a crear) para seguir marcando su fila y poder detenerlo.
+    pub started: Mutex<Option<String>>,
     /// Contexto de la ventana abierta; `None` mientras la app vive solo en la bandeja.
     ctx: Mutex<Option<egui::Context>>,
     /// Hay una petición de abrir la ventana pendiente.
@@ -41,6 +44,7 @@ impl Desktop {
             simple: AtomicBool::new(true),
             window: Mutex::new(WindowSizes::default()),
             reopening: AtomicBool::new(false),
+            started: Mutex::new(None),
             ctx: Mutex::new(None),
             pending: Mutex::new(visible),
             wake: Condvar::new(),
@@ -209,14 +213,11 @@ impl ksni::Tray for Tray {
             StandardItem {
                 label: "Iniciar servidor".into(),
                 activate: Box::new(|t: &mut Self| {
-                    let script = t
-                        .desktop
-                        .settings
-                        .lock()
-                        .ok()
-                        .and_then(|s| s.launch_script.clone());
+                    let settings = t.desktop.settings.lock().ok().map(|s| s.clone());
                     let core = t.core.clone();
                     t.runtime.spawn(async move {
+                        let saved = core.scripts().await.unwrap_or_default();
+                        let script = settings.and_then(|s| s.resolve_launch_script(&saved));
                         let script = match script {
                             Some(s) => Ok(s),
                             None => core.script_default().await,

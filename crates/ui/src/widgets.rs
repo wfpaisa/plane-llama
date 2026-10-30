@@ -326,6 +326,23 @@ pub fn best(ui: &mut Ui, text: &str) -> Response {
         t.ok,
     )
 }
+/// Ancho que ocupará `chip` con este texto.
+pub fn chip_width(ui: &Ui, text: &str) -> f32 {
+    chip_width_with(ui, text, &theme::font_medium(Tokens::FONT_XS))
+}
+/// Ancho que ocupará `best` con este texto.
+pub fn best_width(ui: &Ui, text: &str) -> f32 {
+    chip_width_with(ui, text, &egui::FontId::monospace(Tokens::FONT_SM))
+}
+fn chip_width_with(ui: &Ui, text: &str, font: &egui::FontId) -> f32 {
+    let margin = (Tokens::S2 + 2.) / 2.;
+    ui.painter()
+        .layout_no_wrap(text.to_owned(), font.clone(), Tokens::INK)
+        .size()
+        .x
+        + 2. * margin
+        + 1.
+}
 fn chip_with(
     ui: &mut Ui,
     text: &str,
@@ -339,13 +356,7 @@ fn chip_with(
     let height = ui.fonts_mut(|f| f.row_height(&font)) + 2. * margin.y;
     // Ancho justo: con todo el disponible, en una fila con salto cada ficha bajaba
     // a su propia línea.
-    let width = ui
-        .painter()
-        .layout_no_wrap(text.to_owned(), font.clone(), ink)
-        .size()
-        .x
-        + 2. * margin.x
-        + 1.;
+    let width = chip_width_with(ui, text, &font);
     ui.allocate_ui_with_layout(
         egui::vec2(width, height),
         egui::Layout::left_to_right(egui::Align::Center),
@@ -857,6 +868,26 @@ pub struct Dialog<R> {
     pub close: bool,
 }
 /// Diálogo modal con cabecera (título y ✕), fondo atenuado y ancho adaptable.
+/// Avance (0 a 1) de la entrada de un diálogo; vuelve a empezar cada vez que se abre,
+/// es decir, cuando no se mostró en la pasada anterior.
+fn appear(ctx: &egui::Context, id: egui::Id) -> f32 {
+    let pass = ctx.cumulative_pass_nr();
+    let now = ctx.input(|i| i.time);
+    let start = ctx.data_mut(|d| {
+        let start = match d.get_temp::<(u64, f64)>(id) {
+            Some((last, start)) if last + 1 >= pass => start,
+            _ => now,
+        };
+        d.insert_temp(id, (pass, start));
+        start
+    });
+    let linear = ((now - start) as f32 / Tokens::DIALOG_FADE).clamp(0., 1.);
+    if linear < 1. {
+        ctx.request_repaint();
+    }
+    egui::emath::easing::cubic_out(linear)
+}
+
 pub fn dialog<R>(
     ctx: &egui::Context,
     id: &str,
@@ -869,8 +900,17 @@ pub fn dialog<R>(
     let width = width
         .min(ctx.content_rect().width() - Tokens::DIALOG_INSET)
         .max(Tokens::DIALOG_MIN);
+    let shown = appear(ctx, egui::Id::new((id, "appear")));
     let modal = egui::Modal::new(egui::Id::new(id))
-        .backdrop_color(t.backdrop)
+        .area(
+            egui::Modal::default_area(egui::Id::new(id))
+                .fade_in(false)
+                .anchor(
+                    Align2::CENTER_CENTER,
+                    vec2(0., Tokens::DIALOG_SLIDE * (1. - shown)),
+                ),
+        )
+        .backdrop_color(t.backdrop.gamma_multiply(shown))
         .frame(
             Frame::new()
                 .fill(t.surface)
@@ -879,6 +919,7 @@ pub fn dialog<R>(
                 .shadow(ctx.global_style().visuals.window_shadow),
         )
         .show(ctx, |ui| {
+            ui.multiply_opacity(shown);
             ui.set_width(width);
             // El área del modal parte del tamaño del frame anterior; sin esto, si la
             // ventana crece con el diálogo abierto, el cuerpo sigue con la altura vieja.

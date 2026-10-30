@@ -195,6 +195,12 @@ impl Tokens {
     /// Alto de la cabecera del diálogo y del margen que el modal deja con la ventana.
     pub const DIALOG_CHROME: f32 = 160.;
     pub const DIALOG_FOOTER: f32 = 88.;
+    /// Entrada de los diálogos: duración (s) y desplazamiento inicial hacia abajo.
+    pub const DIALOG_FADE: f32 = 0.18;
+    pub const DIALOG_SLIDE: f32 = 12.;
+    /// Carga simulada del modelo: constante de tiempo (s) y tope antes de quedar listo.
+    pub const LOAD_PACE: f32 = 6.;
+    pub const LOAD_MAX: f32 = 0.95;
     pub const TOAST_WIDTH: f32 = 360.;
     pub const SEARCH_WIDTH: f32 = 240.;
     pub const SEARCH_NARROW: f32 = 150.;
@@ -227,10 +233,6 @@ impl Tokens {
     pub const RELOAD_WIDTH: f32 = 220.;
     pub const ROW_LG: f32 = 40.;
     pub const ROW_HUB: f32 = 56.;
-    pub const CHIP_SLOT: f32 = 76.;
-    pub const ICON_SLOT: f32 = 20.;
-    pub const QUANT_SLOT: f32 = 112.;
-    pub const TPS_SLOT: f32 = 100.;
     pub const ACTION_SLOT: f32 = 104.;
     pub const HUB_LIST: f32 = 380.;
     pub const LOGO: f32 = 28.;
@@ -240,13 +242,8 @@ impl Tokens {
     pub const COMPACT_BAR: f32 = 40.;
     /// Ancho de fila por debajo del cual Scripts deja los botones solo con icono.
     pub const ROW_NARROW: f32 = 600.;
-    /// Anchos de fila a partir de los cuales Scripts muestra la cuantización, y los
-    /// tok/s y el icono de visión; la ventana compacta queda por debajo de ambos.
-    pub const ROW_QUANT: f32 = 380.;
-    pub const ROW_TPS: f32 = 480.;
-    /// Anchos de fila a partir de los cuales Scripts muestra tamaño, y contexto y parámetros.
-    pub const ROW_WIDE: f32 = 640.;
-    pub const ROW_WIDER: f32 = 760.;
+    /// Ancho que el nombre de un script conserva antes de dejar etiquetas fuera.
+    pub const NAME_MIN: f32 = 140.;
 
     pub fn get(ctx: &egui::Context) -> Self {
         WEIGHTS.set(ctx.fonts(|f| f.definitions().families.contains_key(&semibold())));

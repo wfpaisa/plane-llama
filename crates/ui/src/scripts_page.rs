@@ -9,7 +9,7 @@ use crate::{
     theme::{self, Tokens},
     widgets::{self, Kind, icons},
 };
-use egui::{Align, Layout, RichText, Ui};
+use egui::{Align, Layout, RichText, Ui, vec2};
 use plane_llama_core::{
     client::format::{fmt, fmt_gb},
     scripts::SavedScript,
@@ -426,6 +426,33 @@ fn activity(ui: &mut Ui, s: &mut Store) {
     }
 }
 
+/// Pinta bajo la fila el avance simulado de la carga del modelo (no hay progreso real:
+/// se acerca a la meta cada vez más despacio). Devuelve `false` si el servidor no carga.
+fn loading_fill(ui: &Ui, s: &Store) -> bool {
+    if s.status.status != "starting" {
+        return false;
+    }
+    let t = Tokens::get(ui.ctx());
+    let elapsed = s
+        .status
+        .started_at
+        .as_deref()
+        .and_then(|at| chrono::DateTime::parse_from_rfc3339(at).ok())
+        .map(|at| (chrono::Utc::now() - at.with_timezone(&chrono::Utc)).as_seconds_f32())
+        .unwrap_or(0.)
+        .max(0.);
+    let progress = (1. - (-elapsed / Tokens::LOAD_PACE).exp()).min(Tokens::LOAD_MAX);
+    let rect =
+        egui::Rect::from_min_size(ui.cursor().min, vec2(ui.available_width(), Tokens::ROW_LG));
+    let mut done = rect;
+    done.set_width(rect.width() * progress);
+    ui.painter()
+        .with_clip_rect(done.intersect(ui.clip_rect()))
+        .rect_filled(rect, Tokens::RADIUS_MD, t.ok_soft);
+    ui.ctx().request_repaint();
+    true
+}
+
 pub(crate) fn row(
     ui: &mut Ui,
     s: &Store,
@@ -441,7 +468,9 @@ pub(crate) fn row(
     let reorder =
         page && s.library.sort == ScriptSort::Manual && s.library.search.trim().is_empty();
     let mut action = None;
-    let (response, ()) = hover_row(ui, is_running, |ui| {
+    // Mientras llama-server carga el modelo, el fondo se llena en vez de marcarse entero.
+    let loading = is_running && loading_fill(ui, s);
+    let (response, ()) = hover_row(ui, is_running && !loading, |ui| {
         if page {
             let mut marked = s.library.selected.contains(&script.id);
             let check = ui.checkbox(&mut marked, "");
@@ -580,73 +609,8 @@ pub(crate) fn row(
             {
                 ui.ctx().open_url(egui::OpenUrl::new_tab(url));
             }
-            if width > Tokens::ROW_WIDE {
-                slot(ui, Tokens::SIZE_WIDTH, |ui| {
-                    ui.label(
-                        RichText::new(meta.size_bytes.map(bytes).unwrap_or_default())
-                            .font(egui::FontId::monospace(Tokens::FONT_SM))
-                            .color(t.text_dim),
-                    );
-                });
-            }
-            if width > Tokens::ROW_TPS {
-                slot(ui, Tokens::TPS_SLOT, |ui| match meta.best_tps {
-                    Some(tps) => {
-                        widgets::best(ui, &format!("{} tok/s", fmt(Some(tps), 1)))
-                            .on_hover_text(format!("Mejor generación en {} benchmarks", meta.runs));
-                    }
-                    None => {
-                        widgets::chip(ui, "sin benchmark", t.surface_alt, t.text_faint);
-                    }
-                });
-            }
-            if width > Tokens::ROW_WIDER {
-                slot(ui, Tokens::CHIP_SLOT, |ui| {
-                    if let Some(ctx) = meta.ctx {
-                        widgets::chip(
-                            ui,
-                            &format!("{}K ctx", fmt(Some(ctx / 1024.), 0)),
-                            t.surface_alt,
-                            t.text_dim,
-                        );
-                    }
-                });
-                slot(ui, Tokens::CHIP_SLOT, |ui| {
-                    if let Some(p) = &meta.params {
-                        widgets::chip(ui, p, t.surface_alt, t.text_dim);
-                    }
-                });
-            }
-            if width > Tokens::ROW_TPS {
-                slot(ui, Tokens::ICON_SLOT, |ui| {
-                    if meta.vision {
-                        ui.label(
-                            RichText::new(icons::IMAGE)
-                                .font(theme::icon_font(Tokens::ICON))
-                                .color(t.accent_ink),
-                        )
-                        .on_hover_text("Multimodal: carga el mmproj");
-                    }
-                });
-            }
-            if width > Tokens::ROW_QUANT {
-                slot(ui, Tokens::QUANT_SLOT, |ui| {
-                    if let Some(q) = &meta.quant {
-                        widgets::chip(ui, q, t.surface_alt, t.text);
-                    }
-                });
-            }
             ui.with_layout(Layout::left_to_right(Align::Center), |ui| {
-                ui.add(
-                    egui::Label::new(
-                        RichText::new(&script.name)
-                            .font(theme::font_medium(Tokens::FONT_BODY))
-                            .color(if script.hidden { t.text_dim } else { t.text }),
-                    )
-                    .truncate()
-                    .selectable(false),
-                )
-                .on_hover_text(name_hint(&meta, &script.name, hint, width));
+                item(ui, script, &meta, hint);
             });
         });
     });
@@ -685,19 +649,157 @@ pub(crate) enum Place {
 
 /// Tooltip del nombre: repo y estado, más la cuantización y los tok/s cuando la fila es
 /// tan estrecha que no los muestra.
-fn name_hint(meta: &ScriptMeta, name: &str, hint: &str, width: f32) -> String {
-    let mut text = format!("{}\n{hint}", meta.repo.as_deref().unwrap_or(name));
-    if width <= Tokens::ROW_QUANT
-        && let Some(q) = &meta.quant
-    {
-        text.push_str(&format!("\n{q}"));
+/// Etiqueta de la fila de un script, junto al nombre.
+enum Tag {
+    Quant(String),
+    Vision,
+    Params(String),
+    Ctx(String),
+    Tps(String, usize),
+    NoBench,
+    Size(String),
+}
+impl Tag {
+    fn width(&self, ui: &Ui) -> f32 {
+        match self {
+            Tag::Quant(text) | Tag::Params(text) | Tag::Ctx(text) => widgets::chip_width(ui, text),
+            Tag::NoBench => widgets::chip_width(ui, "sin benchmark"),
+            Tag::Tps(text, _) => widgets::best_width(ui, text),
+            Tag::Vision => Tokens::ICON,
+            Tag::Size(text) => {
+                ui.painter()
+                    .layout_no_wrap(
+                        text.clone(),
+                        egui::FontId::monospace(Tokens::FONT_SM),
+                        Tokens::INK,
+                    )
+                    .size()
+                    .x
+            }
+        }
     }
-    if width <= Tokens::ROW_TPS
-        && let Some(tps) = meta.best_tps
-    {
-        text.push_str(&format!("\nMejor generación: {} tok/s", fmt(Some(tps), 1)));
+    /// Texto para la ayuda del nombre cuando la etiqueta no cabe.
+    fn hint(&self) -> Option<String> {
+        match self {
+            Tag::Quant(text) | Tag::Params(text) | Tag::Ctx(text) | Tag::Size(text) => {
+                Some(text.clone())
+            }
+            Tag::Tps(text, _) => Some(format!("Mejor generación: {text}")),
+            Tag::Vision => Some("Multimodal".to_owned()),
+            Tag::NoBench => None,
+        }
     }
-    text
+    fn show(&self, ui: &mut Ui, t: &Tokens) {
+        match self {
+            Tag::Quant(text) => {
+                widgets::chip(ui, text, t.surface_alt, t.text);
+            }
+            Tag::Params(text) | Tag::Ctx(text) => {
+                widgets::chip(ui, text, t.surface_alt, t.text_dim);
+            }
+            Tag::NoBench => {
+                widgets::chip(ui, "sin benchmark", t.surface_alt, t.text_faint);
+            }
+            Tag::Tps(text, runs) => {
+                widgets::best(ui, text)
+                    .on_hover_text(format!("Mejor generación en {runs} benchmarks"));
+            }
+            Tag::Vision => {
+                ui.label(
+                    RichText::new(icons::IMAGE)
+                        .font(theme::icon_font(Tokens::ICON))
+                        .color(t.accent_ink),
+                )
+                .on_hover_text("Multimodal: carga el mmproj");
+            }
+            Tag::Size(text) => {
+                ui.label(
+                    RichText::new(text)
+                        .font(egui::FontId::monospace(Tokens::FONT_SM))
+                        .color(t.text_dim),
+                );
+            }
+        }
+    }
+}
+
+/// Nombre del script seguido de sus etiquetas. Las que no caben se omiten, de la menos
+/// importante a la más, y pasan a la ayuda del nombre.
+fn item(ui: &mut Ui, script: &SavedScript, meta: &ScriptMeta, hint: &str) {
+    let t = Tokens::get(ui.ctx());
+    // En orden de importancia; se muestran en el orden de `order`.
+    let mut tags: Vec<(usize, Tag)> = Vec::new();
+    if let Some(q) = &meta.quant {
+        tags.push((0, Tag::Quant(q.clone())));
+    }
+    tags.push((
+        4,
+        match meta.best_tps {
+            Some(tps) => Tag::Tps(format!("{} tok/s", fmt(Some(tps), 1)), meta.runs),
+            None => Tag::NoBench,
+        },
+    ));
+    if meta.vision {
+        tags.push((1, Tag::Vision));
+    }
+    if let Some(p) = &meta.params {
+        tags.push((2, Tag::Params(p.clone())));
+    }
+    if let Some(ctx) = meta.ctx {
+        tags.push((3, Tag::Ctx(format!("{}K ctx", fmt(Some(ctx / 1024.), 0)))));
+    }
+    if let Some(size) = meta.size_bytes {
+        tags.push((5, Tag::Size(bytes(size))));
+    }
+    let gap = Tokens::S2;
+    let font = theme::font_medium(Tokens::FONT_BODY);
+    let name_width = ui
+        .painter()
+        .layout_no_wrap(script.name.clone(), font.clone(), Tokens::INK)
+        .size()
+        .x;
+    // El nombre se queda al menos con este ancho (o el suyo, si es menor).
+    let reserve = name_width.min(Tokens::NAME_MIN) + Tokens::S3;
+    let mut free = ui.available_width() - reserve;
+    let mut shown = Vec::new();
+    let mut hidden = Vec::new();
+    for (order, tag) in tags {
+        let width = tag.width(ui) + gap;
+        if width <= free {
+            free -= width;
+            shown.push((order, tag));
+        } else {
+            hidden.extend(tag.hint());
+        }
+    }
+    shown.sort_by_key(|(order, _)| *order);
+    let used: f32 = shown.iter().map(|(_, tag)| tag.width(ui) + gap).sum();
+    let mut text = format!("{}\n{hint}", meta.repo.as_deref().unwrap_or(&script.name));
+    for h in hidden {
+        text.push_str(&format!("\n{h}"));
+    }
+    let name_room = (ui.available_width() - used - Tokens::S3).max(0.);
+    ui.allocate_ui_with_layout(
+        vec2(name_width.min(name_room), Tokens::CONTROL),
+        Layout::left_to_right(Align::Center),
+        |ui| {
+            ui.add(
+                egui::Label::new(
+                    RichText::new(&script.name)
+                        .font(font)
+                        .color(if script.hidden { t.text_dim } else { t.text }),
+                )
+                .truncate()
+                .selectable(false),
+            )
+            .on_hover_text(text);
+        },
+    );
+    ui.add_space(Tokens::S3 - gap);
+    ui.spacing_mut().item_spacing.x = gap;
+    for (_, tag) in &shown {
+        tag.show(ui, &t);
+    }
 }
 
 /// Filas del editor del diálogo: menos en ventanas bajas, como la compacta.
@@ -758,15 +860,8 @@ pub fn editor_dialog(ctx: &egui::Context, s: &mut Store) {
                         }
                     });
                 });
-                widgets::sunken(ui, |ui| {
-                    ui.add(
-                        egui::TextEdit::multiline(&mut draft.script)
-                            .code_editor()
-                            .frame(egui::Frame::new())
-                            .desired_rows(editor_rows(ui.ctx()))
-                            .desired_width(f32::INFINITY),
-                    );
-                });
+                let rows = editor_rows(ui.ctx());
+                script_editor::code_box(ui, "script-draft-editor", &mut draft.script, rows, "");
                 ui.add_space(Tokens::S1);
                 script_editor::summary(ui, &draft.script);
                 if draft.script.trim().is_empty() {

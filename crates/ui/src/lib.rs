@@ -106,7 +106,12 @@ impl App {
         theme::install_fonts(&cc.egui_ctx);
         theme::apply(&cc.egui_ctx);
         theme::set_accent(&cc.egui_ctx, appearance.accent);
-        let store = Store::load(cc.storage);
+        let mut store = Store::load(cc.storage);
+        store.library.started = desktop
+            .started
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone();
         desktop
             .simple
             .store(store.simple, std::sync::atomic::Ordering::Release);
@@ -403,7 +408,7 @@ impl App {
                     },
                 );
                 ui.add_space(Tokens::S3);
-                settings::controls(ui, &mut self.settings_draft, &s.script);
+                settings::controls(ui, &mut self.settings_draft, &s.library.list);
                 widgets::dialog_footer(ui, |ui| {
                     if widgets::button(ui, widgets::Kind::Primary, None, "Guardar").clicked() {
                         let result =
@@ -645,6 +650,11 @@ impl eframe::App for App {
         );
     }
     fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
+        *self
+            .desktop
+            .started
+            .lock()
+            .unwrap_or_else(|e| e.into_inner()) = self.store.library.started.clone();
         if self
             .desktop
             .quitting

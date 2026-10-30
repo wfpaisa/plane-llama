@@ -650,3 +650,51 @@ Hecho a mano, sin codex. Reemplaza el estilo Solidcraft.
 - «Default» pasa a «Restablecer». Las fichas del modelo omiten los datos que faltan.
 - `widgets::chip` reserva solo el ancho de su texto: en filas con salto cada ficha
   bajaba a su propia línea (también bajo el script del Editor).
+
+## Script al iniciar elegido entre los guardados, con espera, y caja del editor
+
+- Ajustes → «Script al iniciar»: desplegable con «Ninguno» y los scripts guardados (ya no
+  se copia el del editor). Debajo, vista previa del script y «Esperar antes de iniciar»
+  (0–600 s).
+- `AppSettings` suma `launchScriptId` y `launchDelaySecs`. `resolve_launch_script` lanza
+  el texto actual del script guardado; si se borró, la copia en `launchScript` (también
+  la de versiones anteriores, que se muestra como «Script sin guardar»). Lo usan el
+  arranque (tras la espera) y «Iniciar servidor» de la bandeja.
+- `script_editor::code_box`: caja del script con números de línea, binario atenuado,
+  flags en el color de acento, `\` tenue y borde de acento con el foco. La usan el
+  Editor y el diálogo de scripts.
+- Tests: `desktop_settings_pick_saved_launch_script`,
+  `launch_script_follows_saved_script_or_falls_back_to_copy`, `flags_are_not_negative_numbers`.
+
+### Ajustes finos: ajustes, foco del editor y entrada de diálogos
+
+- Ajustes → «Script al iniciar» ya no muestra la vista previa del script; basta el
+  nombre en el desplegable.
+- La caja del editor ya no se mueve al tomar el foco: el borde del Frame mantiene su
+  grosor y el realce en acento se pinta encima, hacia dentro.
+- Los diálogos (`widgets::dialog`) entran con un fundido y un leve desplazamiento hacia
+  arriba (`DIALOG_FADE` = 0,18 s, `DIALOG_SLIDE` = 12 px, `cubic_out`); el fondo también
+  aparece gradualmente. Se reinicia cada vez que el diálogo se abre.
+
+### Script arrancado al cambiar de vista y carga del modelo
+
+- Cambiar entre vista compacta y ampliada (o volver desde la bandeja) vuelve a crear la
+  ventana y la `Store` se recarga del disco, donde no está `library.started`: el servidor
+  seguía corriendo pero ninguna fila lo reconocía, así que todos los «Iniciar» quedaban
+  bloqueados y no había «Detener». Ahora `Desktop::started` guarda ese script entre
+  ventanas (se escribe en `on_exit` y se lee al crear la `App`).
+- Mientras el servidor está en `starting`, el fondo de la fila del script se llena de
+  izquierda a derecha (progreso simulado desde `startedAt`, `LOAD_PACE` = 6 s, tope 95 %)
+  y al pasar a `running` queda marcada entera.
+
+### Filas de Scripts compactas
+
+- La fila ya no reparte las etiquetas en columnas de ancho fijo (que dejaban huecos):
+  el nombre va seguido de sus etiquetas (cuantización, visión, parámetros, contexto,
+  tok/s, tamaño) y a la derecha quedan Iniciar/Detener, el ojo y el menú.
+- Las etiquetas que no caben se omiten de la menos importante a la más (tamaño,
+  contexto, parámetros, visión, tok/s, cuantización) y pasan a la ayuda del nombre; el
+  nombre conserva al menos `NAME_MIN` = 140 px antes de truncarse.
+- La carga simulada del modelo se pinta en verde (`ok_soft`).
+- Se quitaron los tokens de columnas fijas (`CHIP_SLOT`, `QUANT_SLOT`, `TPS_SLOT`,
+  `ICON_SLOT`, `ROW_QUANT`, `ROW_TPS`, `ROW_WIDE`, `ROW_WIDER`).

@@ -53,10 +53,16 @@ fn main() -> anyhow::Result<()> {
         .thread_name("plane-llama-worker")
         .build()?;
     let handle = runtime.handle().clone();
-    if let Some(script) = settings.launch_script {
+    if settings.launch_script.is_some() || settings.launch_script_id.is_some() {
         let c = core.clone();
+        let settings = settings.clone();
         handle.spawn(async move {
-            if let Err(e) = c.start(&script).await {
+            let delay = u64::from(settings.launch_delay_secs);
+            tokio::time::sleep(std::time::Duration::from_secs(delay)).await;
+            let saved = c.scripts().await.unwrap_or_default();
+            if let Some(script) = settings.resolve_launch_script(&saved)
+                && let Err(e) = c.start(&script).await
+            {
                 eprintln!("No se pudo iniciar el servidor: {e}");
             }
         });

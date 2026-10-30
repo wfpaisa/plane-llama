@@ -1,8 +1,9 @@
-// Ajustes de escritorio: segundo plano, arranque con la sesión y script al iniciar.
+// Ajustes de escritorio: segundo plano, arranque con la sesión y script al iniciar
+// (uno de los guardados, con espera opcional).
 use crate::theme::Tokens;
 use crate::theme::{ACCENTS, Accent};
-use crate::widgets::{self, Kind, icons};
-use plane_llama_core::desktop::AppSettings;
+use crate::widgets;
+use plane_llama_core::{desktop::AppSettings, scripts::SavedScript};
 
 /// Muestras de los acentos y un selector para uno propio. Devuelve el nuevo si cambió.
 pub fn accent_picker(ui: &mut egui::Ui, current: Accent) -> Option<Accent> {
@@ -60,7 +61,7 @@ pub fn accent_picker(ui: &mut egui::Ui, current: Accent) -> Option<Accent> {
     chosen
 }
 
-pub fn controls(ui: &mut egui::Ui, settings: &mut AppSettings, script: &str) {
+pub fn controls(ui: &mut egui::Ui, settings: &mut AppSettings, saved: &[SavedScript]) {
     widgets::section_label(ui, "Segundo plano");
     widgets::toggle(
         ui,
@@ -76,41 +77,63 @@ pub fn controls(ui: &mut egui::Ui, settings: &mut AppSettings, script: &str) {
         );
     });
     ui.add_space(Tokens::S3);
+    launch_controls(ui, settings, saved);
+}
+
+/// Script al iniciar: uno de los guardados y cuánto esperar antes de lanzarlo.
+fn launch_controls(ui: &mut egui::Ui, settings: &mut AppSettings, saved: &[SavedScript]) {
     widgets::section_label(ui, "Script al iniciar");
     widgets::dim(
         ui,
         "Se ejecuta automáticamente cada vez que se abre la aplicación.",
     );
-    widgets::sunken(ui, |ui| match &settings.launch_script {
-        Some(script) => {
+    ui.add_space(Tokens::S1);
+    let chosen = settings
+        .launch_script_id
+        .as_deref()
+        .and_then(|id| saved.iter().find(|s| s.id == id));
+    // Un script pegado en versiones anteriores, o uno guardado que ya se borró.
+    let selected_text = match (chosen, &settings.launch_script) {
+        (Some(s), _) => s.name.clone(),
+        (None, Some(_)) => "Script sin guardar".to_owned(),
+        (None, None) => "Ninguno".to_owned(),
+    };
+    egui::ComboBox::from_id_salt("launch-script")
+        .width(ui.available_width())
+        .selected_text(selected_text)
+        .show_ui(ui, |ui| {
+            if ui
+                .selectable_label(settings.launch_script.is_none(), "Ninguno")
+                .clicked()
+            {
+                settings.launch_script = None;
+                settings.launch_script_id = None;
+            }
+            for script in saved {
+                let selected = chosen.is_some_and(|c| c.id == script.id);
+                if ui.selectable_label(selected, &script.name).clicked() {
+                    settings.launch_script_id = Some(script.id.clone());
+                    settings.launch_script = Some(script.script.clone());
+                }
+            }
+        });
+    if saved.is_empty() {
+        widgets::dim(ui, "No hay scripts guardados: crea uno en Scripts.");
+    }
+    ui.add_space(Tokens::S2);
+    let any = chosen.is_some() || settings.launch_script.is_some();
+    widgets::enabled(ui, any, |ui| {
+        ui.horizontal(|ui| {
+            ui.label("Esperar antes de iniciar");
             ui.add(
-                egui::Label::new(
-                    egui::RichText::new(script.split_whitespace().collect::<Vec<_>>().join(" "))
-                        .monospace(),
-                )
-                .wrap(),
+                egui::DragValue::new(&mut settings.launch_delay_secs)
+                    .range(0..=600)
+                    .suffix(" s"),
             );
-        }
-        None => {
-            widgets::dim(ui, "Ninguno");
-        }
+        });
     });
-    ui.horizontal(|ui| {
-        if widgets::button(
-            ui,
-            Kind::Secondary,
-            Some(icons::ARROW_LINE_DOWN),
-            "Usar el script actual del editor",
-        )
-        .clicked()
-        {
-            settings.launch_script = Some(script.to_owned());
-        }
-        let has_script = settings.launch_script.is_some();
-        if widgets::enabled(ui, has_script, |ui| {
-            widgets::button(ui, Kind::Ghost, Some(icons::TRASH), "Quitar").clicked()
-        }) {
-            settings.launch_script = None;
-        }
-    });
+    widgets::dim(
+        ui,
+        "Útil al iniciar con la sesión, para dar tiempo a que carguen los drivers de la GPU.",
+    );
 }
