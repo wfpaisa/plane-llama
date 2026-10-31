@@ -52,8 +52,8 @@ pub fn summary(ui: &mut egui::Ui, script: &str) {
     });
 }
 
-/// Aviso de que el editor modifica un script guardado, con su estado y las salidas:
-/// guardarlo como uno nuevo o dejar de editarlo (el texto se queda en el editor).
+/// Aviso de que el editor modifica un script guardado, con su estado, el botón para
+/// actualizarlo y la X para dejar de editarlo (el texto se queda en el editor).
 fn editing_bar(ui: &mut egui::Ui, s: &mut Store, name: &str, changed: bool) {
     let t = Tokens::get(ui.ctx());
     egui::Frame::new()
@@ -90,16 +90,19 @@ fn editing_bar(ui: &mut egui::Ui, s: &mut Store, name: &str, changed: bool) {
                     if widgets::icon_button(ui, icons::X, "Dejar de editar este script").clicked() {
                         s.editor_source = None;
                     }
-                    if widgets::button(
-                        ui,
-                        Kind::Ghost,
-                        Some(icons::FILE_PLUS),
-                        "Guardar como nuevo",
-                    )
-                    .on_hover_text("Crea otro script con el texto del editor")
+                    if widgets::enabled(ui, changed, |ui| {
+                        widgets::button(
+                            ui,
+                            Kind::Secondary,
+                            Some(icons::FLOPPY_DISK),
+                            "Actualizar script",
+                        )
+                    })
+                    .on_hover_text(format!("Guarda los cambios en «{name}»"))
+                    .on_disabled_hover_text(format!("Sin cambios respecto a «{name}»"))
                     .clicked()
                     {
-                        s.save_editor_as_new();
+                        s.update_saved_from_editor();
                     }
                 });
             });
@@ -126,22 +129,20 @@ pub fn show(ui: &mut egui::Ui, s: &mut Store) {
                 {
                     crate::optimizer_modal::open(s);
                 }
-                // Con un script de la biblioteca ligado, se actualiza; si no, se guarda nuevo.
+                // Ligado a un script guardado, se puede copiar en uno nuevo (actualizar va en la
+                // franja «Editando»); si no, se guarda como script.
                 match &saved {
-                    Some((name, changed)) => {
-                        if widgets::enabled(ui, *changed, |ui| {
-                            widgets::button(
-                                ui,
-                                Kind::Secondary,
-                                Some(icons::FLOPPY_DISK),
-                                "Actualizar script",
-                            )
-                        })
-                        .on_hover_text(format!("Guarda los cambios en «{name}»"))
-                        .on_disabled_hover_text(format!("Sin cambios respecto a «{name}»"))
+                    Some(_) => {
+                        if widgets::button(
+                            ui,
+                            Kind::Secondary,
+                            Some(icons::FILE_PLUS),
+                            "Guardar como nuevo",
+                        )
+                        .on_hover_text("Crea otro script con el texto del editor")
                         .clicked()
                         {
-                            s.update_saved_from_editor();
+                            s.save_editor_as_new();
                         }
                     }
                     None => {

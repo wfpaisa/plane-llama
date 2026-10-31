@@ -715,8 +715,8 @@ Hecho a mano, sin codex. Reemplaza el estilo Solidcraft.
 
 - Con un script de la biblioteca ligado, la tarjeta del editor lleva el borde en acento
   y una franja «Editando *nombre*» con su estado (cambios sin guardar / guardado),
-  «Guardar como nuevo» (crea otro script con el texto del editor) y una X para dejar de
-  editarlo sin tocar el texto. `widgets::card_marked` pinta el borde sin cambiar grosor.
+  «Actualizar script» y una X para dejar de editarlo sin tocar el texto. En la cabecera
+  queda «Guardar como nuevo» (crea otro script con el texto del editor). `widgets::card_marked` pinta el borde sin cambiar grosor.
 - La página Editor queda en dos secciones: arriba el script a todo el ancho; debajo,
   con su título (`widgets::section_title`), «Benchmark»: indicadores, la prueba y el
   detalle del último resultado lado a lado, y la respuesta del modelo.
