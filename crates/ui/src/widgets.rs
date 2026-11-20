@@ -1,10 +1,10 @@
 // Componentes de la interfaz: botones, tarjetas, campos, medidores, diálogos y avisos.
+pub use crate::icons;
 use crate::theme::{self, Tokens};
 use egui::{
     Align, Align2, CursorIcon, Frame, Layout, Margin, Response, RichText, Sense, Stroke,
     StrokeKind, Ui, Vec2, WidgetInfo, WidgetType, pos2, vec2,
 };
-pub use egui_phosphor::regular as icons;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Kind {

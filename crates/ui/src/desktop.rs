@@ -200,18 +200,21 @@ impl ksni::Tray for Tray {
         vec![
             StandardItem {
                 label: format!("Abrir {APP_NAME}"),
+                icon_data: menu_icon("open"),
                 activate: Box::new(|t: &mut Self| t.desktop.show()),
                 ..Default::default()
             }
             .into(),
             StandardItem {
                 label: format!("Servidor: {}", self.status),
+                icon_data: menu_icon("server"),
                 enabled: false,
                 ..Default::default()
             }
             .into(),
             StandardItem {
                 label: "Iniciar servidor".into(),
+                icon_data: menu_icon("start"),
                 activate: Box::new(|t: &mut Self| {
                     let settings = t.desktop.settings.lock().ok().map(|s| s.clone());
                     let core = t.core.clone();
@@ -234,6 +237,7 @@ impl ksni::Tray for Tray {
             .into(),
             StandardItem {
                 label: "Detener servidor".into(),
+                icon_data: menu_icon("stop"),
                 activate: Box::new(|t: &mut Self| {
                     let core = t.core.clone();
                     t.runtime.spawn(async move {
@@ -248,12 +252,24 @@ impl ksni::Tray for Tray {
             ksni::MenuItem::Separator,
             StandardItem {
                 label: "Salir".into(),
+                icon_data: menu_icon("quit"),
                 activate: Box::new(|t: &mut Self| t.desktop.quit()),
                 ..Default::default()
             }
             .into(),
         ]
     }
+}
+/// PNG del icono de un item del menú de la bandeja (HugeIcons, `assets/tray`).
+fn menu_icon(name: &str) -> Vec<u8> {
+    let bytes: &[u8] = match name {
+        "open" => include_bytes!("../../../assets/tray/open.png"),
+        "server" => include_bytes!("../../../assets/tray/server.png"),
+        "start" => include_bytes!("../../../assets/tray/start.png"),
+        "stop" => include_bytes!("../../../assets/tray/stop.png"),
+        _ => include_bytes!("../../../assets/tray/quit.png"),
+    };
+    bytes.to_vec()
 }
 fn status_label(status: &str) -> String {
     match status {

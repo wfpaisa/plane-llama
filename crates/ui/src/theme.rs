@@ -408,7 +408,7 @@ fn weighted(size: f32, family: FontFamily) -> FontId {
     }
 }
 pub fn icon_font(size: f32) -> FontId {
-    weighted(size, FontFamily::Name("phosphor".into()))
+    weighted(size, FontFamily::Name("icons".into()))
 }
 pub fn font(size: f32) -> FontId {
     FontId::proportional(size)
@@ -447,17 +447,25 @@ pub fn install_fonts(ctx: &egui::Context) {
             std::sync::Arc::new(egui::FontData::from_static(bytes)),
         );
     }
-    egui_phosphor::add_to_fonts(&mut fonts, egui_phosphor::Variant::Regular);
-    // Las familias propias heredan los respaldos de egui (iconos, emoji, símbolos).
-    // Inter trae glifos propios en el área de uso privado donde Phosphor pone sus
-    // iconos, así que los iconos se pintan con la familia «phosphor» (`icon_font`).
+    // Los iconos (HugeIcons) van en su propia familia «icons» (`icon_font`); las
+    // familias de texto heredan los respaldos de egui (emoji, símbolos) y la de
+    // iconos, cuyos puntos de código (plano 15) no chocan con Inter.
+    fonts.font_data.insert(
+        "hugeicons".into(),
+        std::sync::Arc::new(egui::FontData::from_static(include_bytes!(
+            "../../../assets/fonts/hugeicons/hugeicons-subset.ttf"
+        ))),
+    );
+    fonts
+        .families
+        .insert(FontFamily::Name("icons".into()), vec!["hugeicons".into()]);
     let fallback: Vec<String> = fonts
         .families
         .get(&FontFamily::Proportional)
         .cloned()
         .unwrap_or_default()
         .into_iter()
-        .filter(|name| name != "phosphor")
+        .chain(["hugeicons".to_owned()])
         .collect();
     for (family, first) in [
         (FontFamily::Proportional, "inter"),

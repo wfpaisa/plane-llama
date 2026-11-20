@@ -13,6 +13,7 @@ pub mod compare_modal;
 pub mod desktop;
 pub mod gpu_grid;
 pub mod history_table;
+pub mod icons;
 pub mod last_result;
 pub mod library;
 pub mod logs_viewer;

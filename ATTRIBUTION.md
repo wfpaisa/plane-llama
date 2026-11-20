@@ -12,9 +12,9 @@ en `assets/fonts/inter`, con su `OFL.txt`.
 IBM Plex Mono, de IBM, se distribuye bajo SIL Open Font License 1.1; la carpeta
 `assets/fonts/ibm-plex-mono` incluye su `OFL.txt` con el aviso de copyright completo.
 
-Los iconos son Phosphor, mediante
-[egui-phosphor](https://github.com/amPerl/egui-phosphor) 0.14
-(MIT OR Apache-2.0); los diseños de Phosphor se distribuyen bajo MIT.
+Los iconos son [HugeIcons](https://hugeicons.com) (estilo stroke rounded). La app
+incluye solo los glifos que usa en `assets/fonts/hugeicons/hugeicons-subset.ttf` y
+los del menú de la bandeja en `assets/tray`; ambos los genera `scripts/icons.py`.
 
 El logo (`assets/plane-llama.svg` y sus PNG) es el de plane-llama-bench, del mismo
 autor.
